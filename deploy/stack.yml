@@ -1,0 +1,102 @@
+version: "3.9"
+
+services:
+  crew-hub:
+    # Swarm requires an image; build/push it (see STACK.md).
+    image: "${CREW_HUB_IMAGE:-crew/crew-hub}:${CREW_HUB_TAG:-latest}"
+    ports:
+      - target: 3000
+        published: ${CREW_HUB_PORT:-38471}
+        protocol: tcp
+        # "ingress" = routing mesh (service can float; hit any node IP)
+        mode: ingress
+    environment:
+      # Always talk to Synapse over the stack network.
+      MATRIX_UPSTREAM_URL: "http://synapse:8008"
+      CREW_SYNAPSE_SERVER_NAME: "${CREW_SYNAPSE_SERVER_NAME:-localhost}"
+      CREW_MATRIX_DEFAULT_ROOM_ID: "${CREW_MATRIX_DEFAULT_ROOM_ID:-}"
+      SYNAPSE_ADMIN_PORT: "${SYNAPSE_ADMIN_PORT:-18088}"
+      # Everything else can come from your .env via interpolation.
+      CREW_SESSION_SECRET: "${CREW_SESSION_SECRET:-}"
+      CREW_MATRIX_SEED_USER: "${CREW_MATRIX_SEED_USER:-}"
+      CREW_MATRIX_SEED_PASSWORD: "${CREW_MATRIX_SEED_PASSWORD:-}"
+      CREW_SYNAPSE_ADMIN_ACCESS_TOKEN: "${CREW_SYNAPSE_ADMIN_ACCESS_TOKEN:-}"
+      CREW_MATRIX_SYNC_ENABLED: "${CREW_MATRIX_SYNC_ENABLED:-}"
+      NEXT_PUBLIC_CREW_PUBLIC_URL: "${NEXT_PUBLIC_CREW_PUBLIC_URL:-}"
+      NEXT_PUBLIC_SERVICE_SYNAPSE_URL: "${NEXT_PUBLIC_SERVICE_SYNAPSE_URL:-}"
+      NEXT_PUBLIC_MATRIX_HOMESERVER_URL: "${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-}"
+      NEXT_PUBLIC_SERVICE_MATRIX_CLIENT_URL: "${NEXT_PUBLIC_SERVICE_MATRIX_CLIENT_URL:-}"
+      NEXT_PUBLIC_VDO_NINJA_ROOM_PASSWORD: "${NEXT_PUBLIC_VDO_NINJA_ROOM_PASSWORD:-}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      SMTP_SECURE: "${SMTP_SECURE:-}"
+    volumes:
+      # NFS-backed volume so this service can float.
+      - crew_hub_data:/app/.data
+    networks:
+      - crew_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        order: start-first
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    ports:
+      - target: 8008
+        published: ${SYNAPSE_PORT:-8008}
+        protocol: tcp
+        # routing mesh so clients can hit any node; Synapse task stays on one node
+        mode: ingress
+    environment:
+      SYNAPSE_SERVER_NAME: "${SYNAPSE_SERVER_NAME:-localhost}"
+      SYNAPSE_REPORT_STATS: "${SYNAPSE_REPORT_STATS:-no}"
+    volumes:
+      - synapse_data:/data
+    networks:
+      - crew_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname == avarapiles
+
+  synapse-admin:
+    image: awesometechnologies/synapse-admin:latest
+    ports:
+      - target: 80
+        published: ${SYNAPSE_ADMIN_PORT:-18088}
+        protocol: tcp
+        mode: ingress
+    networks:
+      - crew_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+networks:
+  crew_net:
+    driver: overlay
+
+volumes:
+  crew_hub_data:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=${CREW_NFS_ADDR:-avmacedon},rw,nfsvers=3,proto=tcp"
+      device: ":${CREW_NFS_EXPORT_ROOT:-/export/srv/config}/crew/${CREW_INSTANCE_ID:-crew-fresh}/crew-hub-data"
+  synapse_data:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=${CREW_NFS_ADDR:-avmacedon},rw,nfsvers=3,proto=tcp"
+      device: ":${CREW_NFS_EXPORT_ROOT:-/export/srv/config}/crew/${CREW_INSTANCE_ID:-crew-fresh}/synapse"
+

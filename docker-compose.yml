@@ -1,0 +1,72 @@
+# Full Crew stack: Hub + Matrix (Synapse). HR (directory + leave) runs inside crew-hub.
+#
+# Usage:
+#   cp .env.example .env
+#   ./scripts/compose-up.sh
+#   # or: docker compose run --rm synapse generate   # first time only — creates /data/homeserver.yaml
+#   #     docker compose up -d --build
+#
+# If http://127.0.0.1:8008 fails: Synapse needs homeserver.yaml. Run `docker compose run --rm synapse generate`
+# once, then `docker compose up -d synapse` (see matrixdotorg/synapse Docker README).
+#
+# Browser URLs use 127.0.0.1 — ports are fixed to avoid common clashes (3000, 8080).
+# synapse-admin (Matrix Synapse admin UI): default host port 18088 (8088 is often taken). Override SYNAPSE_ADMIN_PORT + NEXT_PUBLIC_SERVICE_SYNAPSE_URL.
+
+name: crew
+
+services:
+  crew-hub:
+    depends_on:
+      - synapse
+    build:
+      context: ./crew-hub
+      dockerfile: Dockerfile
+      args:
+        # synapse-admin UI (see synapse-admin service); not raw Synapse :8008
+        NEXT_PUBLIC_SERVICE_SYNAPSE_URL: ${NEXT_PUBLIC_SERVICE_SYNAPSE_URL:-http://127.0.0.1:18088}
+        NEXT_PUBLIC_MATRIX_HOMESERVER_URL: ${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-}
+        # Always the Docker service name — NOT host .env’s 127.0.0.1:8008 (that breaks rewrites inside the container).
+        MATRIX_UPSTREAM_URL: http://synapse:8008
+    ports:
+      - "${CREW_HUB_PORT:-38471}:3000"
+    env_file:
+      - .env
+    environment:
+      # Overrides .env — inside the container 127.0.0.1 is not Synapse; must use the compose network.
+      MATRIX_UPSTREAM_URL: http://synapse:8008
+      # Must match Synapse server_name (SYNAPSE_SERVER_NAME) for MXIDs and Admin API user IDs.
+      CREW_SYNAPSE_SERVER_NAME: ${CREW_SYNAPSE_SERVER_NAME:-localhost}
+      # Optional: Matrix room id (!xxx:server) — auto-open in /comms when joined (also in .env).
+      CREW_MATRIX_DEFAULT_ROOM_ID: ${CREW_MATRIX_DEFAULT_ROOM_ID:-}
+    volumes:
+      - crew_hub_data:/app/.data
+    restart: unless-stopped
+
+  synapse-admin:
+    image: awesometechnologies/synapse-admin:latest
+    ports:
+      - "${SYNAPSE_ADMIN_PORT:-18088}:80"
+    restart: unless-stopped
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    ports:
+      - "8008:8008"
+    environment:
+      SYNAPSE_SERVER_NAME: "${SYNAPSE_SERVER_NAME:-localhost}"
+      SYNAPSE_REPORT_STATS: "${SYNAPSE_REPORT_STATS:-no}"
+    volumes:
+      - synapse-data:/data
+    restart: unless-stopped
+
+  whisper-asr:
+    image: onerahmet/openai-whisper-asr-webservice:latest-cpu
+    ports:
+      - "${WHISPER_ASR_PORT:-9000}:9000"
+    environment:
+      ASR_MODEL: ${WHISPER_ASR_MODEL:-base.en}
+    restart: unless-stopped
+
+volumes:
+  crew_hub_data:
+  synapse-data:

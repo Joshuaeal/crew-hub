@@ -1,0 +1,13 @@
+{
+  "name": "crew",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix crew-hub",
+    "build": "npm run build --prefix crew-hub",
+    "start": "npm run start --prefix crew-hub",
+    "lint": "npm run lint --prefix crew-hub",
+    "matrix:provision-rooms": "npm run matrix:provision-rooms --prefix crew-hub",
+    "sku:migrate": "npm run sku:migrate --prefix crew-hub",
+    "inventory:import-csv": "npm run inventory:import-csv --prefix crew-hub"
+  }
+}

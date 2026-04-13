@@ -1,0 +1,24 @@
+import { headers } from "next/headers";
+import { EmbeddedApp } from "@/components/EmbeddedApp";
+import { serviceUrls } from "@/lib/service-urls";
+
+export function SynapseAdminEmbed() {
+  const h = headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = (h.get("x-forwarded-proto") ?? "http").split(",")[0]?.trim() || "http";
+  const hubOrigin = host ? `${proto}://${host}` : "";
+
+  return (
+    <EmbeddedApp
+      title="Synapse Admin"
+      description={
+        hubOrigin
+          ? `synapse-admin (users, rooms, server checks). On the login form, set Homeserver to ${hubOrigin} so requests use this hub’s /_matrix and /_synapse proxies — or use your direct Synapse URL (e.g. http://127.0.0.1:8008) if the browser can reach it. Sign in with a Matrix account that has Synapse server-admin.`
+          : `synapse-admin (users, rooms, server checks). On the login form, set Homeserver to this site’s URL (same as the address bar) so /_synapse is proxied through Crew Hub, or point at Synapse directly. Sign in with a server-admin Matrix account.`
+      }
+      src={serviceUrls.synapseAdmin}
+      envVarName="NEXT_PUBLIC_SERVICE_SYNAPSE_URL"
+      onboardHref="/onboard/matrix-crew"
+    />
+  );
+}

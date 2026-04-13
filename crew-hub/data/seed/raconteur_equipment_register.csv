@@ -1,0 +1,40 @@
+Category,Item,Owner,Mid_Value_AUD,Hire_Low,Hire_Mid,Hire_High
+Cinema,Blackmagic Cinema Camera 4K,Josh Alegre,3000,100,140,180
+Cinema,Blackmagic 6K Camera,Ethan Aqualina,3800,130,180,240
+Cinema,Blackmagic URSA,Ethan Aqualina,5800,200,300,420
+Cinema,Sigma Zoom Lenses (kit),Ethan Aqualina,4000,60,120,180
+Cinema,Vintage Prime Kit,Josh Alegre,2500,50,100,150
+Cinema,Matte Box + ND Filters,Ethan Aqualina,1400,30,55,80
+Cinema,Follow Focus Systems,Ethan Aqualina,1000,25,45,70
+Cinema,Onboard Monitors,Ethan Aqualina,1200,25,60,90
+Cinema,Tripods / Support,Shared,2000,30,80,120
+Movement,Easyrig System,Josh Alegre,5500,120,180,250
+Movement,Steadicam Rig,Ethan Aqualina,8500,180,320,500
+Movement,Ronin Gimbal (x2),Split,4500,80,150,220
+Aerial,DJI Avata FPV Kit,Ethan Aqualina,2000,90,150,220
+Lighting,300W LED Light (x2),Ethan Aqualina,1600,40,80,120
+Lighting,120W Bi-Colour Light (x3),Split,1800,30,60,90
+Lighting,RGB COB Lights (x8),Split,7000,40,90,140
+Lighting,Pixel Tubes,Ethan Aqualina,1400,35,70,100
+Lighting,Moving Head Spotlights,Ethan Aqualina,4000,80,160,250
+Grip,Flags / Cutters,Josh Alegre,1000,25,50,80
+Grip,Bounce / Diffusion,Josh Alegre,600,20,40,60
+Grip,Stands / Hardware,Josh Alegre,2000,30,80,120
+Grip,Rope Access Kit,Josh Alegre,5000,120,250,400
+Core Systems,ATEM Mini Extreme ISO,Shared,1050,60,110,160
+Core Systems,NDI Server,Josh Alegre,3500,120,200,300
+Core Systems,OPNsense Router + WAN,Josh Alegre,1200,50,90,150
+Core Systems,Managed Switch,Josh Alegre,1000,40,80,120
+Core Systems,Mesh WiFi System,Josh Alegre,900,30,60,100
+Core Systems,RF Microphone System,Josh Alegre (50%),4000,120,220,320
+Core Systems,Midas S32,Josh Alegre,3200,120,180,260
+Flyrack,Mac Studio,Josh Alegre,4500,120,200,320
+Flyrack,ViewSonic Touchscreen,Josh Alegre,2200,50,100,150
+Flyrack,Dell Touchscreen,Josh Alegre,2200,50,100,150
+Audio,Midas M32C,Josh Alegre,1800,80,150,220
+Audio,AES50 Stageboxes,Josh Alegre,2800,100,160,240
+Audio,Dual SoundGrid Servers,Josh Alegre,3800,120,200,300
+Comms,Headset System,Josh Alegre,2500,80,150,250
+Comms,Comms Infrastructure,Josh Alegre,3800,120,200,300
+Vehicles,Production Vehicle,Josh Alegre,25000,120,200,300
+Vehicles,4WD Vehicle,Ethan Aqualina,17000,100,170,250

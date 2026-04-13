@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.data
+npm-debug.log*
+
+# Secrets — never bake into images
+.env
+.env.local
+.env.docker
