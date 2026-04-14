@@ -2,26 +2,27 @@ version: "3.9"
 
 services:
   crew-hub:
-    # Swarm requires an image; build/push it (see STACK.md).
-    image: "${CREW_HUB_IMAGE:-crew/crew-hub}:${CREW_HUB_TAG:-latest}"
+    # Official image published to GHCR on every push to main.
+    # Override CREW_HUB_IMAGE / CREW_HUB_TAG to use a local build.
+    image: "${CREW_HUB_IMAGE:-ghcr.io/joshuaeal/crew-hub}:${CREW_HUB_TAG:-latest}"
     ports:
       - target: 3000
         published: ${CREW_HUB_PORT:-38471}
         protocol: tcp
-        # "ingress" = routing mesh (service can float; hit any node IP)
         mode: ingress
     environment:
-      # Always talk to Synapse over the stack network.
       MATRIX_UPSTREAM_URL: "http://synapse:8008"
+      SYNAPSE_SERVER_NAME: "${SYNAPSE_SERVER_NAME:-localhost}"
       CREW_SYNAPSE_SERVER_NAME: "${CREW_SYNAPSE_SERVER_NAME:-localhost}"
       CREW_MATRIX_DEFAULT_ROOM_ID: "${CREW_MATRIX_DEFAULT_ROOM_ID:-}"
       SYNAPSE_ADMIN_PORT: "${SYNAPSE_ADMIN_PORT:-18088}"
-      # Everything else can come from your .env via interpolation.
       CREW_SESSION_SECRET: "${CREW_SESSION_SECRET:-}"
       CREW_MATRIX_SEED_USER: "${CREW_MATRIX_SEED_USER:-}"
       CREW_MATRIX_SEED_PASSWORD: "${CREW_MATRIX_SEED_PASSWORD:-}"
       CREW_SYNAPSE_ADMIN_ACCESS_TOKEN: "${CREW_SYNAPSE_ADMIN_ACCESS_TOKEN:-}"
       CREW_MATRIX_SYNC_ENABLED: "${CREW_MATRIX_SYNC_ENABLED:-}"
+      # Whisper ASR (voice transcription) — points to the whisper-asr service
+      WHISPER_ASR_URL: "http://whisper-asr:9000"
       NEXT_PUBLIC_CREW_PUBLIC_URL: "${NEXT_PUBLIC_CREW_PUBLIC_URL:-}"
       NEXT_PUBLIC_SERVICE_SYNAPSE_URL: "${NEXT_PUBLIC_SERVICE_SYNAPSE_URL:-}"
       NEXT_PUBLIC_MATRIX_HOMESERVER_URL: "${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-}"
@@ -34,7 +35,6 @@ services:
       SMTP_FROM: "${SMTP_FROM:-}"
       SMTP_SECURE: "${SMTP_SECURE:-}"
     volumes:
-      # NFS-backed volume so this service can float.
       - crew_hub_data:/app/.data
     networks:
       - crew_net
@@ -51,7 +51,6 @@ services:
       - target: 8008
         published: ${SYNAPSE_PORT:-8008}
         protocol: tcp
-        # routing mesh so clients can hit any node; Synapse task stays on one node
         mode: ingress
     environment:
       SYNAPSE_SERVER_NAME: "${SYNAPSE_SERVER_NAME:-localhost}"
@@ -64,9 +63,12 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+      # Pin Synapse to one node so its volume data stays consistent.
+      # Set SYNAPSE_NODE_HOSTNAME in your environment, or remove this
+      # constraint if you are using a single-node swarm.
       placement:
         constraints:
-          - node.hostname == avarapiles
+          - "node.hostname == ${SYNAPSE_NODE_HOSTNAME:-}"
 
   synapse-admin:
     image: awesometechnologies/synapse-admin:latest
@@ -82,6 +84,25 @@ services:
       restart_policy:
         condition: on-failure
 
+  whisper-asr:
+    # Local Whisper speech-to-text — no audio leaves the server.
+    # Scale to 1 to enable: docker service scale crew_whisper-asr=1
+    # Or set WHISPER_ASR_REPLICAS=1 before deploying.
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    ports:
+      - target: 9000
+        published: ${WHISPER_ASR_PORT:-9000}
+        protocol: tcp
+        mode: ingress
+    environment:
+      ASR_MODEL: "${WHISPER_ASR_MODEL:-base.en}"
+    networks:
+      - crew_net
+    deploy:
+      replicas: ${WHISPER_ASR_REPLICAS:-0}
+      restart_policy:
+        condition: on-failure
+
 networks:
   crew_net:
     driver: overlay
@@ -91,12 +112,11 @@ volumes:
     driver: local
     driver_opts:
       type: "nfs"
-      o: "addr=${CREW_NFS_ADDR:-avmacedon},rw,nfsvers=3,proto=tcp"
-      device: ":${CREW_NFS_EXPORT_ROOT:-/export/srv/config}/crew/${CREW_INSTANCE_ID:-crew-fresh}/crew-hub-data"
+      o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
+      device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/crew-hub-data"
   synapse_data:
     driver: local
     driver_opts:
       type: "nfs"
-      o: "addr=${CREW_NFS_ADDR:-avmacedon},rw,nfsvers=3,proto=tcp"
-      device: ":${CREW_NFS_EXPORT_ROOT:-/export/srv/config}/crew/${CREW_INSTANCE_ID:-crew-fresh}/synapse"
-
+      o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
+      device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/synapse"

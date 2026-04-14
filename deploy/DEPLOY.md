@@ -1,69 +1,115 @@
-# Deploy the full Crew stack
+# Deploy Crew Hub
 
-All containerized services are defined in `docker-compose.yml` at the repo root.
+All services are defined in `docker-compose.yml` at the repo root.
 
 ## Prerequisites
 
-- `git`
-- Docker Desktop or Docker Engine + Compose v2
-- Ports **free** on localhost: `38471`, `8008` (Synapse)
+- Docker Engine + Docker Compose v2 (or Docker Desktop)
+- Ports free on the host: `38471`, `8008`, `18088`
 
-## Quick start (Docker Compose)
+## Quick start
 
 ```bash
-git clone https://github.com/Joshuaeal/Crew-Hub.git
-cd Crew-Hub
+git clone https://github.com/Joshuaeal/crew-hub.git
+cd crew-hub
 cp .env.example .env
+```
+
+Edit `.env` — set at minimum:
+
+```bash
+CREW_SESSION_SECRET=your-long-random-secret
+SYNAPSE_SERVER_NAME=your-domain.com   # or 'localhost' for local/LAN
+```
+
+Then start the stack:
+
+```bash
 docker compose up -d --build
 ```
 
-## Fresh-instance first run
+Open `http://<server-ip>:38471`.
 
-1. Open Crew Hub:
-   - local: `http://127.0.0.1:38471`
-   - LAN: `http://<server-ip>:38471` (e.g. `http://192.168.1.10:38471`)
-2. Create the first **admin** account on `/login` (only possible when no users exist yet).
-3. Go to `/setup` to configure:
-   - company name + logo (shows on invoices)
-   - email sender defaults
-   - invoice terms / global CSS
+## First-run setup
+
+1. Open the app and create an **admin account** on `/login` (only shown when no users exist yet).
+2. You are redirected automatically to the **setup wizard** (`/admin/instance`).
+3. In the wizard:
+   - **Choose modules** — tick only what this company needs (Billing, Inventory, Shifts, HR, Comms, Subcontractor Portal)
+   - Set company name, logo, and brand colour
+   - Configure Matrix homeserver and Synapse admin URLs if needed
+   - Set billing defaults (sender block, invoice number format, email sender)
+4. Click **Complete setup →**
+
+The dashboard opens showing only the enabled modules. Everything can be changed later at **Admin → Instance settings**.
 
 ## URLs (default)
 
 | Service | URL | Notes |
 |--------|-----|--------|
-| Crew Hub | http://127.0.0.1:38471 | Billing, channels (Matrix SDK), shifts, **HR** (directory & leave), admin tools |
-| Synapse | http://127.0.0.1:8008 | Matrix homeserver; **Channels** in Crew uses `NEXT_PUBLIC_MATRIX_HOMESERVER_URL` / `MATRIX_UPSTREAM_URL` |
+| Crew Hub | `http://<ip>:38471` | Main application |
+| Synapse | `http://<ip>:8008` | Matrix homeserver |
+| Synapse Admin | `http://<ip>:18088` | Synapse management UI |
+| Whisper ASR | `http://<ip>:9000` | Speech-to-text (optional, see below) |
 
-**Element Web** is no longer part of the compose file; Matrix chat runs inside Crew via `matrix-js-sdk`.
+Matrix chat runs inside Crew Hub via `matrix-js-sdk` — no separate Element install needed.
 
-### CORS
+## Whisper ASR (voice transcription, optional)
 
-If the browser blocks login to Synapse from Crew Hub, configure Synapse (or a reverse proxy) to allow your Crew origin for client API requests.
+Crew Hub includes a live transcription feature that posts spoken audio as text into Matrix rooms. Transcription runs **entirely on your server** — no audio leaves your network.
+
+Start the Whisper service:
+
+```bash
+docker compose up -d whisper-asr
+```
+
+Then use **Comms → Transcribe** in the app. Adjust the model size in `.env`:
+
+```bash
+WHISPER_ASR_MODEL=base.en   # tiny.en / base.en / small.en / medium.en
+```
+
+Larger models are more accurate but use more RAM. `base.en` is a good default.
+
+## Adding users
+
+Go to **Admin → Users** and create accounts. Assign permissions per module — enabling a module makes it visible, but users still need the relevant permission to access it.
 
 ## Reverse proxy / Cloudflare Tunnel
 
-- Set `NEXT_PUBLIC_CREW_PUBLIC_URL` in `.env` to your external URL (used in invoice email links).
-- If using Synapse Admin from inside the hub, set `NEXT_PUBLIC_SERVICE_SYNAPSE_URL` to a reachable URL from your browser.
+Point your public hostname at port `38471`. The app proxies `/_matrix` internally so only one public origin is needed.
+
+Set in `.env` if using an external URL:
+
+```bash
+NEXT_PUBLIC_CREW_PUBLIC_URL=https://your-domain.com
+```
 
 ## Data persistence / backups
 
-Compose uses named volumes:
+Compose uses named Docker volumes:
 
-- `crew_hub_data` → Crew Hub data (`/app/.data`)
-- `synapse-data` → Matrix Synapse data (`/data`)
+- `crew_hub_data` — all app data (`/app/.data`)
+- `synapse-data` — Matrix homeserver data
 
-Back up these volumes (or migrate to bind-mounts on your server).
+Back up both volumes, or switch to bind-mounts on your server for easier access.
 
-## HR (people & leave)
+## Updating
 
-Built into Crew Hub — see **`deploy/ORANGEHRM.md`** (filename kept for old links).
+```bash
+git pull
+docker compose up -d --build
+```
+
+Settings and data in volumes survive rebuilds.
 
 ## Swarm / Stack (optional)
 
-If you want Swarm, use `deploy/stack.yml` + `deploy/STACK.md`.
+For multi-node Swarm deployments, see `deploy/STACK.md` and `deploy/stack.yml`.
 
 ## Troubleshooting
 
-- **Matrix login fails**: create a user on Synapse first; check CORS and Matrix proxy env vars.
-- **Rebuild Hub** after changing `NEXT_PUBLIC_*`: `docker compose up -d --build crew-hub`.
+- **Matrix login fails**: check `MATRIX_UPSTREAM_URL` (must be reachable from the crew-hub container, e.g. `http://synapse:8008`) and `SYNAPSE_SERVER_NAME`.
+- **Rebuild after changing `NEXT_PUBLIC_*` vars**: `docker compose up -d --build crew-hub`
+- **esbuild platform error** (dev only): `rm -rf node_modules && npm ci` in `crew-hub/`
