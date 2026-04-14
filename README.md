@@ -21,9 +21,11 @@ Enable only what each company needs. Everything is toggled from the setup wizard
 
 ## Deploy
 
+No repo clone needed — just grab the two config files and start:
+
 ```bash
-git clone https://github.com/Joshuaeal/Crew-Hub.git
-cd Crew-Hub
+curl -O https://raw.githubusercontent.com/Joshuaeal/crew-hub/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/Joshuaeal/crew-hub/main/.env.example
 cp .env.example .env
 ```
 
@@ -37,10 +39,10 @@ SYNAPSE_SERVER_NAME=your-domain.com   # or 'localhost' for local/LAN
 Then:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-Open `http://<server-ip>:38471`.
+Docker pulls the pre-built image from GHCR automatically. Open `http://<server-ip>:38471`.
 
 ## First-run setup
 
@@ -93,8 +95,8 @@ Back up both volumes, or switch to bind mounts for easier access.
 ## Updating
 
 ```bash
-git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-Settings are persisted in volumes — they survive rebuilds.
+Docker pulls the latest image from GHCR. Settings and data are in volumes — they survive updates.
