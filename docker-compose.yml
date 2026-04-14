@@ -67,6 +67,15 @@ services:
       ASR_MODEL: ${WHISPER_ASR_MODEL:-base.en}
     restart: unless-stopped
 
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "${LIVEKIT_PORT:-7880}:7880"
+      - "7881:7881"
+      - "50100-50200:50100-50200/udp"
+    restart: unless-stopped
+
 volumes:
   crew_hub_data:
   synapse-data:

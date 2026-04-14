@@ -80,6 +80,13 @@ export type InstanceSettings = {
    */
   enabledModules?: ModuleId[];
   /**
+   * LiveKit server WebSocket URL for radio comms.
+   * Example: ws://localhost:7880 or wss://livekit.yourdomain.com
+   */
+  livekitUrl?: string;
+  /** Radio channel names shown in the comms radio page (comma-separated label:roomName pairs or just labels). */
+  radioChannels?: string[];
+  /**
    * Set to true after the admin completes the initial setup wizard.
    * When false, the dashboard redirects admins to /admin/instance.
    */

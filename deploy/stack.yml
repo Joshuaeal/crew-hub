@@ -84,6 +84,31 @@ services:
       restart_policy:
         condition: on-failure
 
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /livekit.yaml
+    ports:
+      - target: 7880
+        published: ${LIVEKIT_PORT:-7880}
+        protocol: tcp
+        mode: ingress
+      - target: 7881
+        published: 7881
+        protocol: tcp
+        mode: ingress
+      - target: 50100
+        published: 50100
+        protocol: udp
+        mode: ingress
+    volumes:
+      - livekit_config:/livekit.yaml
+    networks:
+      - crew_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
   whisper-asr:
     # Local Whisper speech-to-text — no audio leaves the server.
     # Scale to 1 to enable: docker service scale crew_whisper-asr=1

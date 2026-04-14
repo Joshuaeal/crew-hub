@@ -12,6 +12,7 @@ import {
   LogOut,
   MessageSquare,
   Radio,
+  Mic,
   Server,
   Shield,
   Calendar,
@@ -207,6 +208,7 @@ export function WorkspaceShell({
         { href: "/comms", label: "Channels", icon: MessageSquare, active: on("/comms") && !pathname.startsWith("/comms/vdo") && !pathname.startsWith("/comms/transcribe"), visible: true },
         { href: "/comms/vdo", label: "Production video", icon: Video, active: on("/comms/vdo"), visible: true },
         { href: "/comms/transcribe", label: "Transcribe", icon: Radio, active: on("/comms/transcribe"), visible: true },
+        { href: "/comms/radio", label: "Radio", icon: Mic, active: on("/comms/radio"), visible: true },
       );
     }
 
@@ -358,6 +360,13 @@ export function WorkspaceShell({
                 label="Transcribe"
                 icon={Radio}
                 active={pathname.startsWith("/comms/transcribe")}
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <NavLink
+                href="/comms/radio"
+                label="Radio"
+                icon={Mic}
+                active={pathname.startsWith("/comms/radio")}
                 onNavigate={() => setMobileOpen(false)}
               />
             </>
@@ -536,6 +545,15 @@ export function WorkspaceShell({
                             label="Transcribe"
                             icon={Radio}
                             active={pathname.startsWith("/comms/transcribe")}
+                            onNavigate={() => setMobileOpen(false)}
+                          />
+                        )}
+                        {showComms && (
+                          <NavLink
+                            href="/comms/radio"
+                            label="Radio"
+                            icon={Mic}
+                            active={pathname.startsWith("/comms/radio")}
                             onNavigate={() => setMobileOpen(false)}
                           />
                         )}

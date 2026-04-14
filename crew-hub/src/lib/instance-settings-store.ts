@@ -143,6 +143,19 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
       invoiceSequenceStart: parseInvoiceSequenceStart(o.invoiceSequenceStart),
       palette: { brand, ...(accent ? { accent } : {}), ...(invoiceBase ? { invoiceBase } : {}) },
       skuOwnerCode: typeof o.skuOwnerCode === "string" ? o.skuOwnerCode : base.skuOwnerCode,
+      livekitUrl: isHttpUrl(o.livekitUrl)
+        ? (o.livekitUrl as string).trim()
+        : typeof o.livekitUrl === "string" && o.livekitUrl.trim().startsWith("ws")
+          ? o.livekitUrl.trim()
+          : undefined,
+      radioChannels: (() => {
+        if (!Array.isArray(o.radioChannels)) return undefined;
+        const ch = (o.radioChannels as unknown[])
+          .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+          .map((s) => s.trim())
+          .slice(0, 20);
+        return ch.length > 0 ? ch : undefined;
+      })(),
       enabledModules: (() => {
         if (!Array.isArray(o.enabledModules)) return undefined;
         const mods = (o.enabledModules as unknown[])

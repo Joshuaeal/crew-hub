@@ -424,7 +424,7 @@ export function TranscribeApp({ defaultHomeserver, matrixDomain, matrixUsesHubPr
           )}
           <button
             type="button"
-            onClick={() => { recording ? stopRecording() : void startRecording(); }}
+            onClick={() => { if (recording) { stopRecording(); } else { void startRecording(); } }}
             disabled={!activeRoomId || devices.length === 0}
             className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition disabled:opacity-40 ${
               recording
