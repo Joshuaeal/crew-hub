@@ -38,6 +38,11 @@ services:
       CREW_SYNAPSE_SERVER_NAME: ${CREW_SYNAPSE_SERVER_NAME:-localhost}
       # Optional: Matrix room id (!xxx:server) — auto-open in /comms when joined (also in .env).
       CREW_MATRIX_DEFAULT_ROOM_ID: ${CREW_MATRIX_DEFAULT_ROOM_ID:-}
+      # LiveKit — matches --dev mode defaults; override in .env for production
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      # Whisper ASR
+      WHISPER_ASR_URL: ${WHISPER_ASR_URL:-http://whisper-asr:9000}
     volumes:
       - crew_hub_data:/app/.data
     restart: unless-stopped

@@ -80,6 +80,8 @@ export async function PATCH(request: Request) {
     skuOwnerCode: typeof patch.skuOwnerCode === "string" ? patch.skuOwnerCode : undefined,
     enabledModules: Array.isArray(patch.enabledModules) ? (patch.enabledModules as string[] as import("@/types/instance").ModuleId[]) : undefined,
     setupComplete: patch.setupComplete === true ? true : undefined,
+    livekitUrl: typeof patch.livekitUrl === "string" ? patch.livekitUrl : undefined,
+    radioChannels: Array.isArray(patch.radioChannels) ? (patch.radioChannels as string[]) : undefined,
   });
 
   return NextResponse.json({ settings: next });

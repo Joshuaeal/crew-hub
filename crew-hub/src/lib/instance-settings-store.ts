@@ -143,11 +143,16 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
       invoiceSequenceStart: parseInvoiceSequenceStart(o.invoiceSequenceStart),
       palette: { brand, ...(accent ? { accent } : {}), ...(invoiceBase ? { invoiceBase } : {}) },
       skuOwnerCode: typeof o.skuOwnerCode === "string" ? o.skuOwnerCode : base.skuOwnerCode,
-      livekitUrl: isHttpUrl(o.livekitUrl)
-        ? (o.livekitUrl as string).trim()
-        : typeof o.livekitUrl === "string" && o.livekitUrl.trim().startsWith("ws")
-          ? o.livekitUrl.trim()
-          : undefined,
+      livekitUrl: (() => {
+        if (typeof o.livekitUrl !== "string") return undefined;
+        const t = o.livekitUrl.trim();
+        if (!t) return undefined;
+        try {
+          const u = new URL(t);
+          if (["ws:", "wss:", "http:", "https:"].includes(u.protocol)) return t;
+        } catch { /* fall through */ }
+        return undefined;
+      })(),
       radioChannels: (() => {
         if (!Array.isArray(o.radioChannels)) return undefined;
         const ch = (o.radioChannels as unknown[])

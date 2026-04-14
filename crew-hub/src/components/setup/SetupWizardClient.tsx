@@ -34,6 +34,8 @@ type InstanceSettings = {
   skuOwnerCode?: string;
   enabledModules?: ModuleId[];
   setupComplete?: boolean;
+  livekitUrl?: string;
+  radioChannels?: string[];
   updatedAt: string;
 };
 
@@ -85,6 +87,8 @@ export function SetupWizardClient() {
   const [vdoNinjaUrls, setVdoNinjaUrls] = useState("");
   const [vdoRoomPassword, setVdoRoomPassword] = useState("");
   const [vdoRoomPrefix, setVdoRoomPrefix] = useState("");
+  const [livekitUrl, setLivekitUrl] = useState("");
+  const [radioChannels, setRadioChannels] = useState("");
   const [invoiceNumberFormat, setInvoiceNumberFormat] = useState("");
   const [invoiceSequenceStart, setInvoiceSequenceStart] = useState("");
   const [enabledModules, setEnabledModules] = useState<ModuleId[]>(ALL_MODULE_IDS);
@@ -124,6 +128,8 @@ export function SetupWizardClient() {
           setVdoNinjaUrls((inst.vdoNinjaUrls || []).join(", "));
           setVdoRoomPassword(inst.vdoRoomPassword || "");
           setVdoRoomPrefix(inst.vdoRoomPrefix || "");
+          setLivekitUrl(inst.livekitUrl || "");
+          setRadioChannels((inst.radioChannels || []).join(", "));
           setInvoiceNumberFormat(inst.invoiceNumberFormat || "");
           setInvoiceSequenceStart(
             typeof inst.invoiceSequenceStart === "number" ? String(inst.invoiceSequenceStart) : ""
@@ -189,6 +195,10 @@ export function SetupWizardClient() {
             vdoNinjaUrls,
             vdoRoomPassword,
             vdoRoomPrefix,
+            livekitUrl,
+            radioChannels: radioChannels.trim()
+              ? radioChannels.split(",").map((s) => s.trim()).filter(Boolean)
+              : undefined,
             invoiceNumberFormat,
             invoiceSequenceStart: invoiceSequenceStart.trim()
               ? Number.parseInt(invoiceSequenceStart.trim(), 10)
@@ -597,6 +607,36 @@ export function SetupWizardClient() {
                   />
                   <p className="mt-1 text-xs text-slate-600">
                     Where the synapse-admin web UI is published (reverse proxy or tunnel).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    LiveKit URL (radio comms)
+                  </label>
+                  <input
+                    value={livekitUrl}
+                    onChange={(e) => setLivekitUrl(e.target.value)}
+                    placeholder="ws://localhost:7880"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-xs text-slate-600">
+                    WebSocket URL of your LiveKit server. Use <code className="rounded bg-black/30 px-1">ws://</code> for LAN or <code className="rounded bg-black/30 px-1">wss://</code> for a tunnelled URL. Leave blank to default to <code className="rounded bg-black/30 px-1">ws://localhost:7880</code>.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Radio channels
+                  </label>
+                  <input
+                    value={radioChannels}
+                    onChange={(e) => setRadioChannels(e.target.value)}
+                    placeholder="Main, Stage, Camera, Sound, Director"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-xs text-slate-600">
+                    Comma-separated channel names. Leave blank for defaults (Main, Stage, Camera, Sound, Director). Use <code className="rounded bg-black/30 px-1">Label:room-name</code> to set a custom room ID.
                   </p>
                 </div>
 
