@@ -6,6 +6,7 @@ import type {
   BillingLineItem,
   BillingStatus,
   PriceTier,
+  QuotePackage,
 } from "@/types/billing";
 import { BILLING_CURRENCY } from "@/types/billing";
 import { readBillingSettings } from "@/lib/billing-settings-store";
@@ -40,6 +41,7 @@ function parseLineItemsArray(raw: unknown): BillingLineItem[] {
     const gstExempt = o.gstExempt === true;
     if (!description) continue;
     const hrUserId = typeof o.hrUserId === "string" && o.hrUserId.trim() ? o.hrUserId.trim() : undefined;
+    const rateUnit = o.rateUnit === "daily" ? "daily" as const : o.rateUnit === "hourly" ? "hourly" as const : undefined;
     out.push({
       id: typeof o.id === "string" ? o.id : crypto.randomUUID(),
       description,
@@ -47,6 +49,7 @@ function parseLineItemsArray(raw: unknown): BillingLineItem[] {
       unitPrice: unitPrice || "0",
       gstExempt,
       ...(hrUserId ? { hrUserId } : {}),
+      ...(rateUnit ? { rateUnit } : {}),
     });
   }
   return out;
@@ -65,6 +68,22 @@ function normalizeLineItems(raw: unknown): BillingLineItem[] {
           gstExempt: false,
         },
       ];
+}
+
+function parsePackages(raw: unknown): QuotePackage[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: QuotePackage[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const id = typeof o.id === "string" ? o.id : crypto.randomUUID();
+    const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : "Package";
+    const description = typeof o.description === "string" && o.description.trim() ? o.description.trim() : undefined;
+    const sortOrder = typeof o.sortOrder === "number" ? o.sortOrder : out.length;
+    const lineItems = parseLineItemsArray(o.lineItems);
+    out.push({ id, name, description, sortOrder, lineItems });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 function normalizePriceTier(raw: unknown): PriceTier | undefined {
@@ -149,6 +168,9 @@ function migrateRow(raw: unknown): BillingDocument | null {
     createdAt: typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString(),
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : new Date().toISOString(),
     createdByEmail: typeof o.createdByEmail === "string" ? o.createdByEmail : "system",
+    projectSlug: typeof o.projectSlug === "string" ? o.projectSlug : undefined,
+    usePackages: o.usePackages === true || undefined,
+    packages: parsePackages(o.packages),
   };
 }
 
@@ -201,6 +223,11 @@ async function writeAll(rows: BillingDocument[]) {
 export async function getBillingInvoice(id: string): Promise<BillingDocument | undefined> {
   const all = await readBillingInvoices();
   return all.find((r) => r.id === id);
+}
+
+export async function readBillingInvoicesForProject(projectSlug: string): Promise<BillingDocument[]> {
+  const all = await readBillingInvoices();
+  return all.filter((r) => r.projectSlug === projectSlug);
 }
 
 async function nextNumber(kind: BillingDocumentKind): Promise<string> {
@@ -301,6 +328,9 @@ export async function createBillingInvoice(input: {
   followUpEnabled?: boolean;
   followUpIntervalDays?: number[];
   createdByEmail: string;
+  projectSlug?: string;
+  usePackages?: boolean;
+  packages?: unknown;
 }): Promise<BillingDocument> {
   const settings = await readBillingSettings();
   const all = await readBillingInvoices();
@@ -351,6 +381,9 @@ export async function createBillingInvoice(input: {
     createdAt: now,
     updatedAt: now,
     createdByEmail: input.createdByEmail,
+    projectSlug: input.projectSlug?.trim() || undefined,
+    usePackages: input.usePackages === true || undefined,
+    packages: parsePackages(input.packages),
   };
 
   if (status === "sent" && followUpEnabled) {
@@ -391,6 +424,8 @@ export async function updateBillingInvoice(
     lastFollowUpAt: string | undefined;
     followUpStage: number;
     sentAt: string | undefined;
+    usePackages: boolean | undefined;
+    packages: unknown;
   }>
 ): Promise<BillingDocument | null> {
   const settings = await readBillingSettings();
@@ -463,6 +498,8 @@ export async function updateBillingInvoice(
     sentAt,
     updatedAt: now,
     createdByEmail: cur.createdByEmail,
+    usePackages: patch.usePackages !== undefined ? (patch.usePackages || undefined) : cur.usePackages,
+    packages: patch.packages !== undefined ? parsePackages(patch.packages) : cur.packages,
   };
 
   const becameSent = newStatus === "sent" && cur.status !== "sent";

@@ -19,6 +19,7 @@ type UserRow = {
   updatedAt: string;
   displayName: string;
   crewHandsRateAudExGst: number | null;
+  crewHandsDailyRateAudExGst: number | null;
 };
 
 const ROLES: CrewRole[] = ["admin", "member", "subcontractor"];
@@ -44,6 +45,7 @@ export function UsersAdminClient() {
   const [permSet, setPermSet] = useState<Set<string>>(() => new Set(defaultPermissionsForRole("member")));
   const [displayName, setDisplayName] = useState("");
   const [crewHandsRate, setCrewHandsRate] = useState("");
+  const [crewHandsDailyRate, setCrewHandsDailyRate] = useState("");
   const [pending, setPending] = useState(false);
 
   const load = useCallback(async () => {
@@ -126,6 +128,13 @@ export function UsersAdminClient() {
                   const n = parseFloat(crewHandsRate);
                   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : undefined;
                 })(),
+          crewHandsDailyRateAudExGst:
+            crewHandsDailyRate.trim() === ""
+              ? undefined
+              : (() => {
+                  const n = parseFloat(crewHandsDailyRate);
+                  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : undefined;
+                })(),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -140,6 +149,7 @@ export function UsersAdminClient() {
       setFullAccess(false);
       setDisplayName("");
       setCrewHandsRate("");
+      setCrewHandsDailyRate("");
       await load();
     } finally {
       setPending(false);
@@ -160,6 +170,7 @@ export function UsersAdminClient() {
           permissions: u.permissions,
           displayName: u.displayName.trim() ? u.displayName.trim() : null,
           crewHandsRateAudExGst: u.crewHandsRateAudExGst,
+          crewHandsDailyRateAudExGst: u.crewHandsDailyRateAudExGst,
           ...(newPassword?.trim() ? { password: newPassword.trim() } : {}),
         }),
       });
@@ -261,11 +272,21 @@ export function UsersAdminClient() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400">Crew on-hands rate (AUD/h ex GST, optional)</label>
+            <label className="block text-sm text-slate-400">Crew hourly rate (AUD/h ex GST, optional)</label>
             <input
               value={crewHandsRate}
               onChange={(e) => setCrewHandsRate(e.target.value)}
               placeholder="e.g. 85"
+              inputMode="decimal"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400">Crew daily rate (AUD/day ex GST, optional)</label>
+            <input
+              value={crewHandsDailyRate}
+              onChange={(e) => setCrewHandsDailyRate(e.target.value)}
+              placeholder="e.g. 600"
               inputMode="decimal"
               className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
             />
@@ -372,6 +393,9 @@ export function UsersAdminClient() {
                         {u.crewHandsRateAudExGst != null ? (
                           <span className="text-slate-500"> · {u.crewHandsRateAudExGst.toFixed(2)} AUD/h</span>
                         ) : null}
+                        {u.crewHandsDailyRateAudExGst != null ? (
+                          <span className="text-slate-500"> · {u.crewHandsDailyRateAudExGst.toFixed(2)} AUD/day</span>
+                        ) : null}
                         <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-xs text-slate-400">
                           {u.role}
                         </span>
@@ -425,6 +449,9 @@ function UserEditRow({
   const [crewHandsRate, setCrewHandsRate] = useState(
     user.crewHandsRateAudExGst != null ? String(user.crewHandsRateAudExGst) : ""
   );
+  const [crewHandsDailyRate, setCrewHandsDailyRate] = useState(
+    user.crewHandsDailyRateAudExGst != null ? String(user.crewHandsDailyRateAudExGst) : ""
+  );
   const [newPassword, setNewPassword] = useState("");
   const [role, setRole] = useState<CrewRole>(user.role);
   const [fullAccess, setFullAccess] = useState(user.permissions.includes("*"));
@@ -464,7 +491,14 @@ function UserEditRow({
         <input
           value={crewHandsRate}
           onChange={(e) => setCrewHandsRate(e.target.value)}
-          placeholder="On-hands AUD/h ex GST"
+          placeholder="Hourly AUD/h ex GST"
+          inputMode="decimal"
+          className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-white"
+        />
+        <input
+          value={crewHandsDailyRate}
+          onChange={(e) => setCrewHandsDailyRate(e.target.value)}
+          placeholder="Daily AUD/day ex GST"
           inputMode="decimal"
           className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-white"
         />
@@ -524,10 +558,20 @@ function UserEditRow({
             if (r !== "") {
               const n = parseFloat(r);
               if (!Number.isFinite(n) || n < 0) {
-                window.alert("Crew on-hands rate must be a non-negative number, or leave blank to clear.");
+                window.alert("Hourly rate must be a non-negative number, or leave blank to clear.");
                 return;
               }
               crewHandsRateAudExGst = Math.round(n * 100) / 100;
+            }
+            let crewHandsDailyRateAudExGst: number | null = null;
+            const dr = crewHandsDailyRate.trim();
+            if (dr !== "") {
+              const n = parseFloat(dr);
+              if (!Number.isFinite(n) || n < 0) {
+                window.alert("Daily rate must be a non-negative number, or leave blank to clear.");
+                return;
+              }
+              crewHandsDailyRateAudExGst = Math.round(n * 100) / 100;
             }
             onSave(
               {
@@ -536,6 +580,7 @@ function UserEditRow({
                 email,
                 displayName: displayName.trim(),
                 crewHandsRateAudExGst,
+                crewHandsDailyRateAudExGst,
                 role,
                 permissions: fullAccess ? ["*"] : Array.from(permSet),
               },

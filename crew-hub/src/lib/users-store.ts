@@ -22,6 +22,8 @@ export type UserRecord = {
   displayName?: string;
   /** Crew on-hands rate: AUD per hour ex GST for billing labour lines. */
   crewHandsRateAudExGst?: number | null;
+  /** Crew daily rate: AUD per day ex GST for billing labour lines. */
+  crewHandsDailyRateAudExGst?: number | null;
 };
 
 const dataDir = path.join(process.cwd(), ".data");
@@ -340,6 +342,7 @@ export async function createUser(input: {
   permissions?: string[];
   displayName?: string;
   crewHandsRateAudExGst?: number | null;
+  crewHandsDailyRateAudExGst?: number | null;
 }): Promise<UserRecord> {
   await ensureInitialized();
   const username = validateUsername(input.username);
@@ -359,6 +362,10 @@ export async function createUser(input: {
     input.crewHandsRateAudExGst === undefined
       ? undefined
       : normalizeHandsRate(input.crewHandsRateAudExGst);
+  const crewHandsDailyRateAudExGst =
+    input.crewHandsDailyRateAudExGst === undefined
+      ? undefined
+      : normalizeHandsRate(input.crewHandsDailyRateAudExGst);
   const row: UserRecord = {
     id: crypto.randomUUID(),
     username,
@@ -370,6 +377,7 @@ export async function createUser(input: {
     updatedAt: t,
     ...(displayName !== undefined ? { displayName } : {}),
     ...(crewHandsRateAudExGst !== undefined ? { crewHandsRateAudExGst } : {}),
+    ...(crewHandsDailyRateAudExGst !== undefined ? { crewHandsDailyRateAudExGst } : {}),
   };
   users.push(row);
   await writeUsers(users);
@@ -386,6 +394,7 @@ export async function updateUser(
     permissions?: string[];
     displayName?: string | null;
     crewHandsRateAudExGst?: number | null;
+    crewHandsDailyRateAudExGst?: number | null;
   }
 ): Promise<UserRecord | null> {
   await ensureInitialized();
@@ -423,6 +432,13 @@ export async function updateUser(
       u.crewHandsRateAudExGst = null;
     } else {
       u.crewHandsRateAudExGst = normalizeHandsRate(patch.crewHandsRateAudExGst) ?? null;
+    }
+  }
+  if (patch.crewHandsDailyRateAudExGst !== undefined) {
+    if (patch.crewHandsDailyRateAudExGst === null) {
+      u.crewHandsDailyRateAudExGst = null;
+    } else {
+      u.crewHandsDailyRateAudExGst = normalizeHandsRate(patch.crewHandsDailyRateAudExGst) ?? null;
     }
   }
 

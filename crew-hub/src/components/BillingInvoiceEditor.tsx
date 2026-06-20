@@ -9,6 +9,7 @@ import type {
   BillingDocument,
   BillingLineItem,
   BillingStatus,
+  QuotePackage,
 } from "@/types/billing";
 import {
   BILLING_CURRENCY,
@@ -17,6 +18,7 @@ import {
   catalogUnitPriceForTier,
   computeBillingTotals,
   defaultStatusesForKind,
+  packageTotals,
   roundMoney2,
 } from "@/types/billing";
 import type { PriceTier } from "@/types/billing";
@@ -24,7 +26,7 @@ import type { InventoryItem } from "@/types/inventory";
 import { billingDocumentFullHtml } from "@/lib/billing-document-html";
 import type { BillingSettings } from "@/types/billing";
 import type { InstanceSettings } from "@/types/instance";
-import { Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Copy, Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react";
 
 type Props = {
   mode: "create" | "edit";
@@ -74,6 +76,7 @@ type CrewRateRow = {
   username: string;
   label: string;
   crewHandsRateAudExGst: number | null;
+  crewHandsDailyRateAudExGst: number | null;
 };
 
 function lineMatchesCatalogTierPrices(line: BillingLineItem, c: BillingCatalogItem): boolean {
@@ -138,6 +141,8 @@ function buildPreviewDoc(
     notes?: string;
     termsText?: string;
     id?: string;
+    usePackages?: boolean;
+    packages?: QuotePackage[];
   }
 ): BillingDocument {
   const now = new Date().toISOString();
@@ -166,6 +171,8 @@ function buildPreviewDoc(
     updatedAt: now,
     createdByEmail: "preview",
     priceTier: args.priceTier ?? "mid",
+    usePackages: args.usePackages,
+    packages: args.packages,
   };
 }
 
@@ -211,6 +218,14 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
     initial?.followUpIntervalDays?.join(",") ?? ""
   );
 
+  const [usePackages, setUsePackages] = useState(initial?.usePackages === true);
+  const [packages, setPackages] = useState<QuotePackage[]>(() =>
+    initial?.packages?.length
+      ? initial.packages.slice().sort((a, b) => a.sortOrder - b.sortOrder)
+      : [{ id: newId(), name: "Package 1", sortOrder: 0, lineItems: [{ id: newId(), description: "", quantity: 1, unitPrice: "0", gstExempt: false }] }]
+  );
+  const [activePackageIdx, setActivePackageIdx] = useState(0);
+
   const statuses = useMemo(() => defaultStatusesForKind(kind), [kind]);
   const previewDoc = useMemo(
     () =>
@@ -232,6 +247,8 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
         notes: notes.trim() || undefined,
         termsText: termsText.trim() || undefined,
         id: initial?.id,
+        usePackages: kind === "quote" && usePackages ? true : undefined,
+        packages: kind === "quote" && usePackages ? packages : undefined,
       }),
     [
       kind,
@@ -251,6 +268,8 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
       labourLines,
       notes,
       termsText,
+      usePackages,
+      packages,
     ]
   );
 
@@ -481,6 +500,81 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
     setLabourLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   }
 
+  function addPackage() {
+    setPackages((prev) => {
+      const next = [...prev, { id: newId(), name: `Package ${prev.length + 1}`, sortOrder: prev.length, lineItems: [{ id: newId(), description: "", quantity: 1, unitPrice: "0", gstExempt: false }] }];
+      setActivePackageIdx(next.length - 1);
+      return next;
+    });
+  }
+
+  function removePackage(idx: number) {
+    if (packages.length <= 1) return;
+    setPackages((prev) => prev.filter((_, i) => i !== idx).map((p, i) => ({ ...p, sortOrder: i })));
+    setActivePackageIdx((i) => Math.min(i, packages.length - 2));
+  }
+
+  function updatePackageMeta(idx: number, patch: { name?: string; description?: string }) {
+    setPackages((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  }
+
+  function addPackageLine(pkgIdx: number) {
+    setPackages((prev) =>
+      prev.map((p, i) =>
+        i === pkgIdx
+          ? { ...p, lineItems: [...p.lineItems, { id: newId(), description: "", quantity: 1, unitPrice: "0", gstExempt: false }] }
+          : p
+      )
+    );
+  }
+
+  function removePackageLine(pkgIdx: number, lineId: string) {
+    setPackages((prev) =>
+      prev.map((p, i) =>
+        i === pkgIdx
+          ? { ...p, lineItems: p.lineItems.length <= 1 ? p.lineItems : p.lineItems.filter((l) => l.id !== lineId) }
+          : p
+      )
+    );
+  }
+
+  function updatePackageLine(pkgIdx: number, lineId: string, patch: Partial<BillingLineItem>) {
+    setPackages((prev) =>
+      prev.map((p, i) =>
+        i === pkgIdx
+          ? { ...p, lineItems: p.lineItems.map((l) => (l.id === lineId ? { ...l, ...patch } : l)) }
+          : p
+      )
+    );
+  }
+
+  function applyPackageLineFromPicklist(pkgIdx: number, lineId: string, value: string, tier: PriceTier) {
+    const key = value.trim().toLowerCase();
+    const cat = catalog.find((c) => c.name.trim().toLowerCase() === key);
+    if (cat) {
+      updatePackageLine(pkgIdx, lineId, { description: cat.name, unitPrice: catalogUnitPriceForTier(cat, tier), gstExempt: cat.defaultGstExempt });
+      return;
+    }
+    const inv = inventoryItems.find((i) => i.name.trim().toLowerCase() === key);
+    if (inv) {
+      updatePackageLine(pkgIdx, lineId, { description: inv.name, unitPrice: inventoryUnitPriceForTier(inv, tier), gstExempt: false });
+      return;
+    }
+    updatePackageLine(pkgIdx, lineId, { description: value });
+  }
+
+  function copyLineToPackage(fromPkgIdx: number, lineId: string, toPkgIdx: number) {
+    const srcLine = packages[fromPkgIdx]?.lineItems.find((l) => l.id === lineId);
+    if (!srcLine) return;
+    setPackages((prev) =>
+      prev.map((p, i) =>
+        i === toPkgIdx
+          ? { ...p, lineItems: [...p.lineItems, { ...srcLine, id: newId() }] }
+          : p
+      )
+    );
+  }
+
   function parseFollowUpDays(): number[] | undefined {
     const raw = followUpDays
       .split(/[,;\s]+/)
@@ -497,6 +591,7 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
       unitPrice: l.unitPrice,
       gstExempt: l.gstExempt === true,
       ...(l.hrUserId ? { hrUserId: l.hrUserId } : {}),
+      ...(l.rateUnit ? { rateUnit: l.rateUnit } : {}),
     }));
   }
 
@@ -509,15 +604,27 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
         }
         const c = crewRates.find((x) => x.id === userId);
         if (!c) return { ...l, hrUserId: userId };
-        const rate = c.crewHandsRateAudExGst;
-        const unit =
-          rate != null && Number.isFinite(rate) ? roundMoney2(rate).toFixed(2) : "0";
+        const unit = l.rateUnit === "daily" ? "daily" : "hourly";
+        const rawRate = unit === "daily" ? c.crewHandsDailyRateAudExGst : c.crewHandsRateAudExGst;
+        const unitPrice = rawRate != null && Number.isFinite(rawRate) ? roundMoney2(rawRate).toFixed(2) : "0";
         return {
           ...l,
           hrUserId: userId,
           description: `Labour — ${c.label}`,
-          unitPrice: unit,
+          unitPrice,
         };
+      })
+    );
+  }
+
+  function applyRateUnit(lineId: string, unit: "hourly" | "daily") {
+    setLabourLines((prev) =>
+      prev.map((l) => {
+        if (l.id !== lineId) return l;
+        const c = l.hrUserId ? crewRates.find((x) => x.id === l.hrUserId) : undefined;
+        const rawRate = c ? (unit === "daily" ? c.crewHandsDailyRateAudExGst : c.crewHandsRateAudExGst) : null;
+        const unitPrice = rawRate != null && Number.isFinite(rawRate) ? roundMoney2(rawRate).toFixed(2) : l.unitPrice;
+        return { ...l, rateUnit: unit, unitPrice };
       })
     );
   }
@@ -526,6 +633,7 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
     setError(null);
     setPending(true);
     try {
+      const isPackagedQuote = kind === "quote" && usePackages;
       const payload: Record<string, unknown> = {
         clientId: clientId || undefined,
         customerName,
@@ -535,10 +643,10 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
         referenceNo: referenceNo.trim() || undefined,
         headerText: headerText.trim() || undefined,
         brief: brief.trim() || undefined,
-        includeGear,
-        includeLabour,
-        gearLineItems: includeGear ? linePayload(gearLines) : [],
-        labourLineItems: includeLabour ? linePayload(labourLines) : [],
+        includeGear: isPackagedQuote ? false : includeGear,
+        includeLabour: isPackagedQuote ? false : includeLabour,
+        gearLineItems: isPackagedQuote ? [] : (includeGear ? linePayload(gearLines) : []),
+        labourLineItems: isPackagedQuote ? [] : (includeLabour ? linePayload(labourLines) : []),
         notes: notes.trim() || undefined,
         termsText: termsText.trim() || undefined,
         sendFromEmail: sendFromEmail.trim() || undefined,
@@ -546,6 +654,16 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
         followUpEnabled,
         followUpIntervalDays: parseFollowUpDays(),
         priceTier,
+        usePackages: isPackagedQuote ? true : false,
+        packages: isPackagedQuote
+          ? packages.map((p, i) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              sortOrder: i,
+              lineItems: linePayload(p.lineItems),
+            }))
+          : [],
       };
 
       if (mode === "create") {
@@ -778,30 +896,48 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
               {crewRates.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
-                  {c.crewHandsRateAudExGst != null
-                    ? ` — ${c.crewHandsRateAudExGst.toFixed(2)} ${BILLING_CURRENCY}/h`
+                  {c.crewHandsRateAudExGst != null || c.crewHandsDailyRateAudExGst != null
+                    ? ` — ${c.crewHandsRateAudExGst != null ? `${c.crewHandsRateAudExGst.toFixed(2)}/h` : "—/h"}${c.crewHandsDailyRateAudExGst != null ? ` · ${c.crewHandsDailyRateAudExGst.toFixed(2)}/day` : ""}`
                     : ""}
                 </option>
               ))}
             </select>
           </div>
-          <div className="w-24">
-            <span className="text-[10px] uppercase text-slate-500">Hours</span>
-            <input
-              type="number"
-              min={0.001}
-              step="any"
-              value={line.quantity}
-              onChange={(e) =>
-                updateLabourLine(line.id, {
-                  quantity: Math.max(0.0001, parseFloat(e.target.value) || 0),
-                })
-              }
-              className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
-            />
+          <div className="flex items-end gap-1">
+            <div className="w-24">
+              <span className="text-[10px] uppercase text-slate-500">{line.rateUnit === "daily" ? "Days" : "Hours"}</span>
+              <input
+                type="number"
+                min={0.001}
+                step="any"
+                value={line.quantity}
+                onChange={(e) =>
+                  updateLabourLine(line.id, {
+                    quantity: Math.max(0.0001, parseFloat(e.target.value) || 0),
+                  })
+                }
+                className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
+              />
+            </div>
+            <div className="flex rounded border border-white/10 overflow-hidden mb-0.5">
+              {(["hourly", "daily"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => applyRateUnit(line.id, u)}
+                  className={`px-2 py-1.5 text-[10px] font-medium transition ${
+                    (line.rateUnit ?? "hourly") === u
+                      ? "bg-brand/40 text-white"
+                      : "bg-black/20 text-slate-500 hover:text-white"
+                  }`}
+                >
+                  {u === "hourly" ? "/hr" : "/day"}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="w-36">
-            <span className="text-[10px] uppercase text-slate-500">Rate / hour</span>
+            <span className="text-[10px] uppercase text-slate-500">Rate / {line.rateUnit === "daily" ? "day" : "hour"}</span>
             <input
               value={line.unitPrice}
               onChange={(e) => updateLabourLine(line.id, { unitPrice: e.target.value })}
@@ -841,15 +977,22 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
             <span className="font-medium text-white tabular-nums">{amounts.exGst.toFixed(2)}</span> {BILLING_CURRENCY}
           </p>
           {selected && (
-            <p className="text-slate-500">
-              HR rate:{" "}
-              {selected.crewHandsRateAudExGst != null ? (
-                <span className="tabular-nums text-brand/90">
-                  {selected.crewHandsRateAudExGst.toFixed(2)} {BILLING_CURRENCY}/h
-                </span>
-              ) : (
-                <span className="text-amber-200/80">Not set in HR — enter rate manually</span>
-              )}
+            <p className="text-slate-500 flex flex-wrap gap-x-3">
+              <span>
+                HR:{" "}
+                {selected.crewHandsRateAudExGst != null ? (
+                  <span className="tabular-nums text-brand/90">{selected.crewHandsRateAudExGst.toFixed(2)} {BILLING_CURRENCY}/h</span>
+                ) : (
+                  <span className="text-slate-600">—/h</span>
+                )}
+              </span>
+              <span>
+                {selected.crewHandsDailyRateAudExGst != null ? (
+                  <span className="tabular-nums text-brand/90">{selected.crewHandsDailyRateAudExGst.toFixed(2)} {BILLING_CURRENCY}/day</span>
+                ) : (
+                  <span className="text-slate-600">—/day</span>
+                )}
+              </span>
             </p>
           )}
         </div>
@@ -1030,39 +1173,54 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
           </select>
         </div>
         <div className="sm:col-span-2 flex flex-wrap gap-6 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-slate-300">
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includeGear}
-              onChange={(e) => setIncludeGear(e.target.checked)}
-              className="rounded border-white/20"
-            />
-            Include gear / equipment section
-          </label>
-          {includeGear && (
-            <label className="flex flex-wrap items-center gap-2">
-              <span className="text-slate-500">Gear rate tier</span>
-              <select
-                value={priceTier}
-                onChange={(e) => onGearPriceTierChange(e.target.value as PriceTier)}
-                className="rounded border border-white/10 bg-black/30 px-2 py-1 text-white"
-                aria-label="Gear hire pricing tier for this document"
-              >
-                <option value="low">Low</option>
-                <option value="mid">Medium</option>
-                <option value="high">High</option>
-              </select>
+          {kind === "quote" && (
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={usePackages}
+                onChange={(e) => setUsePackages(e.target.checked)}
+                className="rounded border-white/20"
+              />
+              Use tiered packages (e.g. Basic / Standard / Premium)
             </label>
           )}
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includeLabour}
-              onChange={(e) => setIncludeLabour(e.target.checked)}
-              className="rounded border-white/20"
-            />
-            Include labour section
-          </label>
+          {!usePackages && (
+            <>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includeGear}
+                  onChange={(e) => setIncludeGear(e.target.checked)}
+                  className="rounded border-white/20"
+                />
+                Include gear / equipment section
+              </label>
+              {includeGear && (
+                <label className="flex flex-wrap items-center gap-2">
+                  <span className="text-slate-500">Gear rate tier</span>
+                  <select
+                    value={priceTier}
+                    onChange={(e) => onGearPriceTierChange(e.target.value as PriceTier)}
+                    className="rounded border border-white/10 bg-black/30 px-2 py-1 text-white"
+                    aria-label="Gear hire pricing tier for this document"
+                  >
+                    <option value="low">Low</option>
+                    <option value="mid">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
+              )}
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={includeLabour}
+                  onChange={(e) => setIncludeLabour(e.target.checked)}
+                  className="rounded border-white/20"
+                />
+                Include labour section
+              </label>
+            </>
+          )}
         </div>
         <div className="sm:col-span-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-slate-400">
           <strong className="text-slate-300">Tax</strong> — Unit prices exclude GST; GST ({gstPct}%) is shown only in
@@ -1074,54 +1232,249 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
         </div>
       </div>
 
-      {includeGear && (
-        <div>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <label className="text-sm font-medium text-slate-300">Gear / equipment</label>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Pick from <Link href="/inventory" className="text-brand/90 hover:underline">inventory</Link> or{" "}
-                <Link href="/billing/catalog" className="text-brand/90 hover:underline">line presets</Link>. Line
-                totals and tier rates update as you type; use Edit to change stock or preset pricing.
-              </p>
-            </div>
+      {kind === "quote" && usePackages ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-300">Packages</p>
             <button
               type="button"
-              onClick={addGearLine}
-              className="inline-flex shrink-0 items-center gap-1 text-xs text-brand/90 hover:text-brand/80"
+              onClick={addPackage}
+              className="inline-flex items-center gap-1 rounded border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand/90 hover:bg-brand/20"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
-              Add line
+              Add package
             </button>
           </div>
-          <div className="mt-2 space-y-3">{gearLines.map((line) => renderGearLineRow(line))}</div>
-        </div>
-      )}
 
-      {includeLabour && (
-        <div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <label className="text-sm font-medium text-slate-300">Labour</label>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Pick crew from HR (on-hands rates).{" "}
-                <Link href="/hr/directory" className="text-brand/90 hover:underline">
-                  Set names &amp; rates in Directory
-                </Link>
-                .
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={addLabourLine}
-              className="inline-flex items-center gap-1 text-xs text-brand/90 hover:text-brand/80"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Add line
-            </button>
+          {/* Package tabs */}
+          <div className="flex flex-wrap gap-2 border-b border-white/10 pb-2">
+            {packages.map((pkg, idx) => (
+              <button
+                key={pkg.id}
+                type="button"
+                onClick={() => setActivePackageIdx(idx)}
+                className={`rounded-t px-3 py-1.5 text-sm font-medium transition-colors ${
+                  idx === activePackageIdx
+                    ? "bg-white/10 text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {pkg.name || `Package ${idx + 1}`}
+              </button>
+            ))}
           </div>
-          <div className="mt-2 space-y-3">{labourLines.map((line) => renderLabourLineRow(line))}</div>
+
+          {/* Active package editor */}
+          {packages[activePackageIdx] && (() => {
+            const pkg = packages[activePackageIdx];
+            const pkgIdx = activePackageIdx;
+            const pkgTots = packageTotals(pkg);
+            return (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs text-slate-500">Package name</label>
+                    <input
+                      value={pkg.name}
+                      onChange={(e) => updatePackageMeta(pkgIdx, { name: e.target.value })}
+                      placeholder="e.g. Basic / Standard / Premium"
+                      className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500">Description (optional)</label>
+                    <input
+                      value={pkg.description ?? ""}
+                      onChange={(e) => updatePackageMeta(pkgIdx, { description: e.target.value })}
+                      placeholder="Short note shown on the quote"
+                      className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-slate-400">Line items</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addPackageLine(pkgIdx)}
+                        className="inline-flex items-center gap-1 text-xs text-brand/90 hover:text-brand/80"
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden />
+                        Add line
+                      </button>
+                      {packages.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePackage(pkgIdx)}
+                          className="text-xs text-red-400/80 hover:text-red-300"
+                        >
+                          Remove package
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {pkg.lineItems.map((line) => {
+                      const amounts = lineAmounts(line);
+                      return (
+                        <div key={line.id} className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                            <div className="min-w-0 flex-1 sm:min-w-[200px]">
+                              <span className="text-[10px] uppercase text-slate-500">Item</span>
+                              <input
+                                value={line.description}
+                                list={gearDatalistId}
+                                onChange={(e) => applyPackageLineFromPicklist(pkgIdx, line.id, e.target.value, priceTier)}
+                                placeholder="Type to search gear or enter item…"
+                                className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
+                              />
+                            </div>
+                            <div className="w-24">
+                              <span className="text-[10px] uppercase text-slate-500">Qty</span>
+                              <input
+                                type="number"
+                                min={0.001}
+                                step="any"
+                                value={line.quantity}
+                                onChange={(e) => updatePackageLine(pkgIdx, line.id, { quantity: Math.max(0.0001, parseFloat(e.target.value) || 0) })}
+                                className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
+                              />
+                            </div>
+                            <div className="w-36">
+                              <span className="text-[10px] uppercase text-slate-500">Unit price</span>
+                              <input
+                                value={line.unitPrice}
+                                onChange={(e) => updatePackageLine(pkgIdx, line.id, { unitPrice: e.target.value })}
+                                className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white"
+                              />
+                            </div>
+                            <label className="flex cursor-pointer items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-2 text-xs text-slate-300 sm:mb-0.5">
+                              <input
+                                type="checkbox"
+                                checked={line.gstExempt}
+                                onChange={(e) => updatePackageLine(pkgIdx, line.id, { gstExempt: e.target.checked })}
+                                className="rounded border-white/20"
+                              />
+                              No GST
+                            </label>
+                            <div className="flex items-center gap-1 sm:mb-0.5">
+                              {packages.length > 1 && (
+                                <div className="relative group">
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-400 hover:bg-white/10 hover:text-slate-200"
+                                    title="Copy to another package"
+                                  >
+                                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                                    Copy to
+                                  </button>
+                                  <div className="absolute right-0 top-full z-10 mt-1 hidden min-w-[140px] rounded-lg border border-white/10 bg-slate-900 p-1 shadow-xl group-focus-within:block group-hover:block">
+                                    {packages.map((p, ti) =>
+                                      ti !== pkgIdx ? (
+                                        <button
+                                          key={p.id}
+                                          type="button"
+                                          onClick={() => copyLineToPackage(pkgIdx, line.id, ti)}
+                                          className="block w-full rounded px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-white/10 hover:text-white"
+                                        >
+                                          {p.name || `Package ${ti + 1}`}
+                                        </button>
+                                      ) : null
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removePackageLine(pkgIdx, line.id)}
+                                className="rounded p-2 text-slate-500 hover:bg-white/10 hover:text-red-300"
+                                aria-label="Remove line"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="border-t border-white/5 pt-2 text-xs text-slate-400">
+                            <span className="text-slate-500">Line total </span>
+                            <span className="font-medium text-white tabular-nums">{amounts.exGst.toFixed(2)}</span> {BILLING_CURRENCY} ex GST
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
+                  <p className="text-slate-400">
+                    Subtotal (ex GST):{" "}
+                    <span className="font-medium text-white">{pkgTots.subtotalExGst.toFixed(2)} {BILLING_CURRENCY}</span>
+                  </p>
+                  <p className="text-slate-400">
+                    GST ({Math.round(GST_RATE * 100)}%):{" "}
+                    <span className="font-medium text-white">{pkgTots.gstAmount.toFixed(2)} {BILLING_CURRENCY}</span>
+                  </p>
+                  <p className="font-semibold text-white">
+                    {pkg.name || "Package"} total: {pkgTots.totalIncGst.toFixed(2)} {BILLING_CURRENCY}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </div>
+      ) : (
+        <>
+          {includeGear && (
+            <div>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <label className="text-sm font-medium text-slate-300">Gear / equipment</label>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Pick from <Link href="/inventory" className="text-brand/90 hover:underline">inventory</Link> or{" "}
+                    <Link href="/billing/catalog" className="text-brand/90 hover:underline">line presets</Link>. Line
+                    totals and tier rates update as you type; use Edit to change stock or preset pricing.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addGearLine}
+                  className="inline-flex shrink-0 items-center gap-1 text-xs text-brand/90 hover:text-brand/80"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add line
+                </button>
+              </div>
+              <div className="mt-2 space-y-3">{gearLines.map((line) => renderGearLineRow(line))}</div>
+            </div>
+          )}
+
+          {includeLabour && (
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <label className="text-sm font-medium text-slate-300">Labour</label>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Pick crew from HR (on-hands rates).{" "}
+                    <Link href="/hr/directory" className="text-brand/90 hover:underline">
+                      Set names &amp; rates in Directory
+                    </Link>
+                    .
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addLabourLine}
+                  className="inline-flex items-center gap-1 text-xs text-brand/90 hover:text-brand/80"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add line
+                </button>
+              </div>
+              <div className="mt-2 space-y-3">{labourLines.map((line) => renderLabourLineRow(line))}</div>
+            </div>
+          )}
+        </>
       )}
 
       <div>
@@ -1183,7 +1536,7 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
           </p>
           <iframe
             title="Preview"
-            className="mt-3 h-[min(520px,70vh)] w-full rounded-lg border border-white/10 bg-white"
+            className="mt-3 h-[min(520px,70vh)] w-full rounded-lg border border-white/10"
             srcDoc={previewHtml}
           />
         </div>
@@ -1191,17 +1544,35 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-4">
         <div className="space-y-0.5 text-sm text-slate-300">
-          <p>
-            Subtotal (ex GST):{" "}
-            <span className="font-medium text-white">{totals.subtotalExGst.toFixed(2)} {BILLING_CURRENCY}</span>
-          </p>
-          <p>
-            GST ({gstPct}%):{" "}
-            <span className="font-medium text-white">{totals.gstAmount.toFixed(2)} {BILLING_CURRENCY}</span>
-          </p>
-          <p className="text-lg font-semibold text-white">
-            Total (inc GST): {totals.totalIncGst.toFixed(2)} {BILLING_CURRENCY}
-          </p>
+          {kind === "quote" && usePackages ? (
+            <>
+              <p className="text-xs text-slate-500">Package totals (inc GST)</p>
+              {packages.map((pkg, idx) => {
+                const t = packageTotals(pkg);
+                return (
+                  <p key={pkg.id}>
+                    <span className="text-slate-400">{pkg.name || `Package ${idx + 1}`}: </span>
+                    <span className="font-medium text-white tabular-nums">{t.totalIncGst.toFixed(2)}</span>{" "}
+                    <span className="text-slate-500">{BILLING_CURRENCY}</span>
+                  </p>
+                );
+              })}
+            </>
+          ) : (
+            <>
+              <p>
+                Subtotal (ex GST):{" "}
+                <span className="font-medium text-white">{totals.subtotalExGst.toFixed(2)} {BILLING_CURRENCY}</span>
+              </p>
+              <p>
+                GST ({gstPct}%):{" "}
+                <span className="font-medium text-white">{totals.gstAmount.toFixed(2)} {BILLING_CURRENCY}</span>
+              </p>
+              <p className="text-lg font-semibold text-white">
+                Total (inc GST): {totals.totalIncGst.toFixed(2)} {BILLING_CURRENCY}
+              </p>
+            </>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {mode === "edit" && (

@@ -18,6 +18,7 @@ function publicUser(u: Awaited<ReturnType<typeof readUsers>>[number]) {
     updatedAt: u.updatedAt,
     displayName: u.displayName ?? "",
     crewHandsRateAudExGst: u.crewHandsRateAudExGst ?? null,
+    crewHandsDailyRateAudExGst: u.crewHandsDailyRateAudExGst ?? null,
   };
 }
 
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
     permissions?: unknown;
     displayName?: string;
     crewHandsRateAudExGst?: number | null;
+    crewHandsDailyRateAudExGst?: number | null;
   };
   try {
     body = await request.json();
@@ -94,6 +96,10 @@ export async function POST(request: Request) {
       crewHandsRateAudExGst:
         body.crewHandsRateAudExGst === null || typeof body.crewHandsRateAudExGst === "number"
           ? body.crewHandsRateAudExGst
+          : undefined,
+      crewHandsDailyRateAudExGst:
+        body.crewHandsDailyRateAudExGst === null || typeof body.crewHandsDailyRateAudExGst === "number"
+          ? body.crewHandsDailyRateAudExGst
           : undefined,
     });
 

@@ -19,6 +19,7 @@ function publicUser(u: NonNullable<Awaited<ReturnType<typeof getUserById>>>) {
     updatedAt: u.updatedAt,
     displayName: u.displayName ?? "",
     crewHandsRateAudExGst: u.crewHandsRateAudExGst ?? null,
+    crewHandsDailyRateAudExGst: u.crewHandsDailyRateAudExGst ?? null,
   };
 }
 
@@ -35,6 +36,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     permissions?: unknown;
     displayName?: string | null;
     crewHandsRateAudExGst?: number | null;
+    crewHandsDailyRateAudExGst?: number | null;
   };
   try {
     body = await request.json();
@@ -64,6 +66,11 @@ export async function PATCH(request: Request, ctx: Ctx) {
     if (body.crewHandsRateAudExGst === null) patch.crewHandsRateAudExGst = null;
     else if (typeof body.crewHandsRateAudExGst === "number") patch.crewHandsRateAudExGst = body.crewHandsRateAudExGst;
     else return NextResponse.json({ error: "Invalid crewHandsRateAudExGst" }, { status: 400 });
+  }
+  if (body.crewHandsDailyRateAudExGst !== undefined) {
+    if (body.crewHandsDailyRateAudExGst === null) patch.crewHandsDailyRateAudExGst = null;
+    else if (typeof body.crewHandsDailyRateAudExGst === "number") patch.crewHandsDailyRateAudExGst = body.crewHandsDailyRateAudExGst;
+    else return NextResponse.json({ error: "Invalid crewHandsDailyRateAudExGst" }, { status: 400 });
   }
 
   try {

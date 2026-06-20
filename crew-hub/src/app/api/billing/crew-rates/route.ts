@@ -15,6 +15,7 @@ export async function GET() {
       username: u.username,
       label,
       crewHandsRateAudExGst: u.crewHandsRateAudExGst ?? null,
+      crewHandsDailyRateAudExGst: u.crewHandsDailyRateAudExGst ?? null,
     };
   });
   items.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));

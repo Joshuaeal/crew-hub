@@ -13,7 +13,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (!gate.ok) return gate.response;
 
   const { id } = await ctx.params;
-  let body: { displayName?: unknown; crewHandsRateAudExGst?: unknown };
+  let body: { displayName?: unknown; crewHandsRateAudExGst?: unknown; crewHandsDailyRateAudExGst?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -39,6 +39,15 @@ export async function PATCH(request: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Invalid crewHandsRateAudExGst" }, { status: 400 });
     }
   }
+  if (body.crewHandsDailyRateAudExGst !== undefined) {
+    if (body.crewHandsDailyRateAudExGst === null) {
+      patch.crewHandsDailyRateAudExGst = null;
+    } else if (typeof body.crewHandsDailyRateAudExGst === "number") {
+      patch.crewHandsDailyRateAudExGst = body.crewHandsDailyRateAudExGst;
+    } else {
+      return NextResponse.json({ error: "Invalid crewHandsDailyRateAudExGst" }, { status: 400 });
+    }
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "No valid fields" }, { status: 400 });
@@ -55,6 +64,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
         role: updated.role,
         displayName: updated.displayName ?? "",
         crewHandsRateAudExGst: updated.crewHandsRateAudExGst ?? null,
+        crewHandsDailyRateAudExGst: updated.crewHandsDailyRateAudExGst ?? null,
       },
     });
   } catch (e) {

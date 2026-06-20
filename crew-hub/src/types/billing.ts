@@ -20,6 +20,8 @@ export type BillingLineItem = {
   gstExempt: boolean;
   /** When set, labour line was tied to a hub user (HR crew on-hands rate). */
   hrUserId?: string;
+  /** Whether the unit price is per hour or per day. Defaults to hourly. */
+  rateUnit?: "hourly" | "daily";
 };
 
 export const BILLING_CURRENCY = "AUD" as const;
@@ -27,6 +29,15 @@ export const GST_RATE = 0.1;
 
 /** Gear hire rate tier for the whole document; gear lines use matching catalog prices when available. */
 export type PriceTier = "low" | "mid" | "high";
+
+/** A single tier/option within a packaged quote. */
+export type QuotePackage = {
+  id: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  lineItems: BillingLineItem[];
+};
 
 export type BillingDocument = {
   id: string;
@@ -69,6 +80,12 @@ export type BillingDocument = {
   createdAt: string;
   updatedAt: string;
   createdByEmail: string;
+  /** Project slug this document was created from, if any. */
+  projectSlug?: string;
+  /** When true (quotes only), document is structured as tiered packages instead of a flat line-item list. */
+  usePackages?: boolean;
+  /** Package tiers (quotes only, when usePackages is true). */
+  packages?: QuotePackage[];
 };
 
 /** @deprecated use BillingDocument */
@@ -116,9 +133,33 @@ export function computeBillingTotals(lineItems: BillingLineItem[]): {
   return { subtotalExGst: sub, gstAmount: gst, totalIncGst };
 }
 
-/** Total inc-GST for a document (gear + labour per toggles). */
+/** Totals for a single quote package. */
+export function packageTotals(pkg: QuotePackage) {
+  return computeBillingTotals(pkg.lineItems.filter((l) => l.description?.trim()));
+}
+
+/** Total range for a packaged quote — null when not packaged. */
+export function packagedQuoteTotalRange(doc: BillingDocument): { min: number; max: number } | null {
+  if (!doc.usePackages || !doc.packages?.length) return null;
+  const tots = doc.packages.map((p) => packageTotals(p).totalIncGst);
+  return { min: Math.min(...tots), max: Math.max(...tots) };
+}
+
+/** Total inc-GST for a document (gear + labour per toggles). For packaged quotes returns the lowest package total. */
 export function billingDocumentTotal(doc: BillingDocument): number {
+  const range = packagedQuoteTotalRange(doc);
+  if (range) return range.min;
   return computeBillingTotals(activeBillingLines(doc)).totalIncGst;
+}
+
+/** Human-readable total label: range string for packaged quotes, fixed amount otherwise. */
+export function billingDocumentTotalLabel(doc: BillingDocument): string {
+  const range = packagedQuoteTotalRange(doc);
+  if (range) {
+    if (range.min === range.max) return `${range.min.toFixed(2)}`;
+    return `${range.min.toFixed(2)} – ${range.max.toFixed(2)}`;
+  }
+  return billingDocumentTotal(doc).toFixed(2);
 }
 
 /** @deprecated use billingDocumentTotal(doc) */

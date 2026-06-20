@@ -25,6 +25,7 @@ export default async function HrDirectoryPage() {
     role: u.role,
     displayName: u.displayName?.trim() ?? "",
     crewHandsRateAudExGst: u.crewHandsRateAudExGst ?? null,
+    crewHandsDailyRateAudExGst: u.crewHandsDailyRateAudExGst ?? null,
   }));
 
   const canEdit = canViewDirectory;
