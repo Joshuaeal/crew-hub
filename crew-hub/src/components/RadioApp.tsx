@@ -87,11 +87,13 @@ export function RadioApp({
   // Channels
   const [customChannels, setCustomChannels] = useState<Channel[]>([]);
   const [channelLabels, setChannelLabels] = useState<Record<string, string>>({});
-  const [channelsLoaded, setChannelsLoaded] = useState(false);
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [addingChannel, setAddingChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
+
+  // Whether we've already done the one-time audio pre-warm (must happen in a user gesture on iOS)
+  const audioPrewarmedRef = useRef(false);
 
   // Multi-room connection state
   // roomId -> Room instance
@@ -106,8 +108,13 @@ export function RadioApp({
   const transmitRoomIdRef = useRef<string | null>(null);
   useEffect(() => { transmitRoomIdRef.current = transmitRoomId; }, [transmitRoomId]);
 
-  // PTT / open mic
-  const [pttMode, setPttMode] = useState(true);
+  // PTT / latch / open mic
+  // 'ptt' = hold to transmit (default), 'latch' = toggle on/off, 'open' = always on
+  const [micMode, setMicMode] = useState<"ptt" | "latch" | "open">("ptt");
+  const micModeRef = useRef<"ptt" | "latch" | "open">("ptt");
+  useEffect(() => { micModeRef.current = micMode; }, [micMode]);
+  // Whether latching is unlocked for this session (resolved at join time via name-match)
+  const [latchingAvailable, setLatchingAvailable] = useState(false);
   const [ptt, setPtt] = useState(false);
   const [txMuted, setTxMuted] = useState(false);
   const pttRef = useRef(false);
@@ -167,15 +174,7 @@ export function RadioApp({
   useEffect(() => {
     setChannelLabels(loadLabels());
     setCustomChannels(loadCustomChannels().map((c) => ({ ...c, isCustom: true })));
-    setChannelsLoaded(true);
   }, []);
-
-  // Auto-connect all channels on load
-  useEffect(() => {
-    if (!channelsLoaded) return;
-    [...baseChannels, ...customChannels].forEach((ch) => void connectRoom(ch));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelsLoaded]);
 
   // Enumerate audio devices — must request mic permission first so mobile returns all devices with labels
   useEffect(() => {
@@ -224,7 +223,6 @@ export function RadioApp({
     const next = [...customChannels, ch];
     setCustomChannels(next);
     saveCustomChannels(next);
-    void connectRoom(ch);
     setNewChannelName("");
     setAddingChannel(false);
   }
@@ -261,7 +259,7 @@ export function RadioApp({
     const useExt = useExtInputRef.current;
 
     const primaryStream = await navigator.mediaDevices.getUserMedia({
-      audio: mic ? { deviceId: { exact: mic }, echoCancellation: true, noiseSuppression: true, autoGainControl: true } : { echoCancellation: true, noiseSuppression: true },
+      audio: mic ? { deviceId: { ideal: mic }, echoCancellation: true, noiseSuppression: true, autoGainControl: true } : { echoCancellation: true, noiseSuppression: true },
     });
     primaryStreamRef.current = primaryStream;
 
@@ -271,7 +269,7 @@ export function RadioApp({
 
     // Mix primary mic + external input via Web Audio API
     const extStream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: ext } },
+      audio: { deviceId: { ideal: ext } },
     });
     extStreamRef.current = extStream;
 
@@ -309,11 +307,15 @@ export function RadioApp({
     setRoomStates((prev) => { const next = new Map(prev); next.set(roomId, ConnectionState.Connecting); return next; });
 
     try {
-      // Pre-warm audio context — iOS WebKit requires getUserMedia within a user gesture
-      // before WebRTC ICE can establish, even in PTT (receive-only) mode.
-      void navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((s) => s.getTracks().forEach((t) => t.stop()))
-        .catch(() => {});
+      // Pre-warm audio session once — iOS WebKit requires a getUserMedia call within a user
+      // gesture before WebRTC ICE can establish. Done once across all channels to avoid
+      // corrupting the AEC reference signal with repeated raw audio requests.
+      if (!audioPrewarmedRef.current) {
+        audioPrewarmedRef.current = true;
+        await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true } })
+          .then((s) => s.getTracks().forEach((t) => t.stop()))
+          .catch(() => {});
+      }
 
       const identity = speakerNameRef.current.trim() || username || "user";
       const res = await fetch("/api/livekit/token", {
@@ -322,11 +324,12 @@ export function RadioApp({
         body: JSON.stringify({ room: roomId, identity }),
       });
       if (!res.ok) throw new Error(`Token error ${res.status}`);
-      const { token } = (await res.json()) as { token: string };
+      const { token, latchingAvailable: la } = (await res.json()) as { token: string; latchingAvailable?: boolean };
+      if (la) setLatchingAvailable(true);
 
       const room = new Room({
         audioCaptureDefaults: {
-          deviceId: selectedMicRef.current || undefined,
+          deviceId: selectedMicRef.current ? { ideal: selectedMicRef.current } : undefined,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
@@ -346,6 +349,7 @@ export function RadioApp({
             setTransmitRoomId(null);
             setPtt(false);
             pttRef.current = false;
+            setMicMode("ptt");
           }
         }
       });
@@ -491,25 +495,26 @@ export function RadioApp({
     }
   }, []);
 
-  // Switch between PTT and open-mic modes
-  const togglePttMode = useCallback(async (next: boolean) => {
-    setPttMode(next);
+  // Switch mic mode
+  const switchMicMode = useCallback(async (next: "ptt" | "latch" | "open") => {
+    const prev = micModeRef.current;
+    setMicMode(next);
     const txRoom = transmitRoomIdRef.current;
-    if (!txRoom) return;
-    const room = roomsRef.current.get(txRoom);
-    if (!room) return;
-    if (next) {
-      // Switching to PTT — kill mic
-      if (publishedTrackRef.current) {
+    const room = txRoom ? roomsRef.current.get(txRoom) : undefined;
+
+    // Leaving open-mic or latch-while-transmitting — kill mic first
+    if (prev === "open" || (prev === "latch" && pttRef.current)) {
+      if (publishedTrackRef.current && room) {
         try { await room.localParticipant.unpublishTrack(publishedTrackRef.current); } catch { /* ok */ }
       }
       teardownTxAudio();
-      await room.localParticipant.setMicrophoneEnabled(false);
+      if (room) await room.localParticipant.setMicrophoneEnabled(false);
       setPtt(false);
       pttRef.current = false;
-    } else {
-      // Switching to open mic — enable unless muted
-      if (!txMutedRef.current) await room.localParticipant.setMicrophoneEnabled(true);
+    }
+
+    if (next === "open" && room && !txMutedRef.current) {
+      await room.localParticipant.setMicrophoneEnabled(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -520,16 +525,16 @@ export function RadioApp({
     // No-op for PTT mode — mic managed by button
   }, [transmitRoomId]);
 
-  // Spacebar PTT
+  // Spacebar PTT / latch toggle
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat && transmitRoomIdRef.current && pttMode) {
-        e.preventDefault();
-        void startPtt();
-      }
+      if (e.code !== "Space" || !transmitRoomIdRef.current) return;
+      const mode = micModeRef.current;
+      if (mode === "ptt" && !e.repeat) { e.preventDefault(); void startPtt(); }
+      if (mode === "latch" && !e.repeat) { e.preventDefault(); void (pttRef.current ? stopPtt() : startPtt()); }
     };
     const onUp = (e: KeyboardEvent) => {
-      if (e.code === "Space" && transmitRoomIdRef.current && pttMode) {
+      if (e.code === "Space" && transmitRoomIdRef.current && micModeRef.current === "ptt") {
         e.preventDefault();
         void stopPtt();
       }
@@ -537,7 +542,7 @@ export function RadioApp({
     window.addEventListener("keydown", onDown);
     window.addEventListener("keyup", onUp);
     return () => { window.removeEventListener("keydown", onDown); window.removeEventListener("keyup", onUp); };
-  }, [pttMode, startPtt, stopPtt]);
+  }, [startPtt, stopPtt]);
 
   // Master volume / mute sync to audio elements
   useEffect(() => {
@@ -606,7 +611,7 @@ export function RadioApp({
       // Local mic — keyed by the user's chosen speaker name
       const localName = speakerNameRef.current.trim() || username || "Me";
       const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: selectedMicRef.current ? { deviceId: { exact: selectedMicRef.current } } : true,
+        audio: selectedMicRef.current ? { deviceId: { ideal: selectedMicRef.current } } : true,
       });
       txMicStreamRef.current = micStream;
       startParticipantRecorder(localName, micStream);
@@ -659,6 +664,8 @@ export function RadioApp({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anyConnected = connectedRooms.size > 0;
+
+  const isMobile = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   // Collect unique remote participants across all rooms for mixer
   const allRemoteParticipants: Participant[] = [];
@@ -769,10 +776,10 @@ export function RadioApp({
                     type="button"
                     onClick={() => { if (isConnected) void disconnectRoom(ch.room); else void connectRoom(ch); }}
                     disabled={isConnecting}
-                    className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg transition disabled:opacity-50 ${
+                    className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
                       isConnected
-                        ? "bg-red-500/20 text-red-300 hover:bg-red-500/30"
-                        : "bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                        ? "bg-red-500/20 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/30"
+                        : "bg-brand text-white shadow shadow-brand/30 ring-1 ring-brand/50 hover:bg-brand/90"
                     }`}
                     aria-label={isConnected ? "Leave channel" : "Join channel"}
                   >
@@ -783,6 +790,7 @@ export function RadioApp({
                     ) : (
                       <Phone className="h-3.5 w-3.5" />
                     )}
+                    <span>{isConnecting ? "Joining…" : isConnected ? "Leave" : "Join"}</span>
                   </button>
 
                   <span className={`h-2 w-2 shrink-0 rounded-full ${
@@ -866,47 +874,65 @@ export function RadioApp({
 
         {/* Controls panel */}
         <div className="space-y-3">
-          {/* PTT mode toggle */}
-          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-            <div>
-              <p className="text-xs font-semibold text-slate-300">{pttMode ? "Push to talk" : "Open mic"}</p>
-              <p className="text-[10px] text-slate-500">{pttMode ? "Hold button or Space" : "Mic always on"}</p>
+          {/* Mic mode selector */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Mic mode</p>
+            <div className="flex gap-2">
+              {(["ptt", "latch", "open"] as const).map((mode) => {
+                if (mode === "latch" && !latchingAvailable) return null;
+                const labels = { ptt: "Push-to-talk", latch: "Latch", open: "Open mic" };
+                const active = micMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => void switchMicMode(mode)}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                      active
+                        ? "bg-brand text-white shadow"
+                        : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {labels[mode]}
+                  </button>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={() => void togglePttMode(!pttMode)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${pttMode ? "bg-brand/70" : "bg-slate-600"}`}
-              aria-label="Toggle PTT mode"
-            >
-              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${pttMode ? "left-0.5" : "left-5"}`} />
-            </button>
+            <p className="text-[10px] text-slate-600">
+              {micMode === "ptt" && "Hold button or Space to transmit"}
+              {micMode === "latch" && "Press once to transmit, press again to stop"}
+              {micMode === "open" && "Mic always on — use mute to silence"}
+            </p>
           </div>
 
-          {/* PTT button or tx mute */}
-          {pttMode ? (
+          {/* PTT / latch button or open-mic tx mute */}
+          {micMode !== "open" ? (
             <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
               <button
                 type="button"
-                onMouseDown={() => void startPtt()}
-                onMouseUp={() => void stopPtt()}
-                onTouchStart={(e) => { e.preventDefault(); void startPtt(); }}
-                onTouchEnd={() => void stopPtt()}
+                onMouseDown={micMode === "ptt" ? () => void startPtt() : undefined}
+                onMouseUp={micMode === "ptt" ? () => void stopPtt() : undefined}
+                onTouchStart={micMode === "ptt" ? (e) => { e.preventDefault(); void startPtt(); } : undefined}
+                onTouchEnd={micMode === "ptt" ? (e) => { e.preventDefault(); void stopPtt(); } : undefined}
+                onClick={micMode === "latch" ? () => void (ptt ? stopPtt() : startPtt()) : undefined}
                 disabled={!anyConnected}
-                className={`flex h-20 w-20 items-center justify-center rounded-full text-white shadow-lg transition-all duration-75 disabled:opacity-30 ${
+                className={`flex h-24 w-24 items-center justify-center rounded-full text-white shadow-xl transition-all duration-75 disabled:opacity-30 ${
                   ptt
-                    ? "scale-95 bg-red-500 shadow-red-500/30 ring-4 ring-red-500/40"
-                    : "bg-brand/80 hover:bg-brand"
+                    ? "scale-95 bg-red-500 shadow-red-500/40 ring-4 ring-red-500/50"
+                    : "bg-brand hover:bg-brand/90 shadow-brand/20 ring-2 ring-brand/30"
                 }`}
-                aria-label="Push to talk"
+                aria-label={micMode === "ptt" ? "Push to talk" : ptt ? "Stop transmitting" : "Start transmitting"}
               >
-                {ptt ? <Mic className="h-8 w-8" /> : <MicOff className="h-8 w-8 opacity-60" />}
+                {ptt ? <Mic className="h-10 w-10" /> : <MicOff className="h-10 w-10 opacity-70" />}
               </button>
               {transmitChannel && (
                 <p className="text-[10px] text-slate-500">
                   → {getLabel(transmitChannel)}
                 </p>
               )}
-              <p className="text-xs text-slate-500">Hold · or hold Space</p>
+              <p className="text-xs text-slate-500">
+                {micMode === "ptt" ? "Hold · or hold Space" : ptt ? "Transmitting — press or Space to stop" : "Press · or Space to transmit"}
+              </p>
             </div>
           ) : (
             <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
@@ -1027,7 +1053,7 @@ export function RadioApp({
                 </div>
               </div>
 
-              {devices.length > 1 && (
+              {devices.length > 1 && !isMobile && (
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <p className="text-[10px] text-slate-500">External input (audio interface)</p>

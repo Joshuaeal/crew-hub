@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
-type ModuleId = "billing" | "inventory" | "shifts" | "hr" | "comms" | "subcontractors";
+type ModuleId = "billing" | "inventory" | "shifts" | "hr" | "comms" | "subcontractors" | "projects" | "socials";
 
 const MODULES: { id: ModuleId; label: string; desc: string }[] = [
   { id: "billing", label: "Invoicing & Billing", desc: "Create and manage invoices, quotes, clients, catalog, and payables." },
@@ -12,6 +12,8 @@ const MODULES: { id: ModuleId; label: string; desc: string }[] = [
   { id: "hr", label: "HR", desc: "Staff directory, leave requests, and HR document storage." },
   { id: "comms", label: "Communications", desc: "Matrix channels and production video (VDO.Ninja)." },
   { id: "subcontractors", label: "Subcontractor Portal", desc: "Let subcontractors log in, submit invoice PDFs, and access production video." },
+  { id: "projects", label: "Projects", desc: "Manage productions as projects — files, talent, pricing, milestones, and invoice generation." },
+  { id: "socials", label: "Socials", desc: "Track when your team last posted on Instagram, Facebook, and LinkedIn — a simple manual posting log." },
 ];
 
 const ALL_MODULE_IDS: ModuleId[] = MODULES.map((m) => m.id);
@@ -30,12 +32,13 @@ type InstanceSettings = {
   vdoRoomPrefix?: string;
   invoiceNumberFormat?: string;
   invoiceSequenceStart?: number;
-  palette: { brand: string; accent?: string; invoiceBase?: string };
+  palette: { brand: string; accent?: string; invoiceBase?: string; invoiceText?: string };
   skuOwnerCode?: string;
   enabledModules?: ModuleId[];
   setupComplete?: boolean;
   livekitUrl?: string;
   radioChannels?: string[];
+  radioLatchingEnabled?: boolean;
   updatedAt: string;
 };
 
@@ -76,6 +79,7 @@ export function SetupWizardClient() {
   const [brand, setBrand] = useState("#5b8cff");
   const [accent, setAccent] = useState("#22c55e");
   const [invoiceBase, setInvoiceBase] = useState("#0b1220");
+  const [invoiceText, setInvoiceText] = useState("#e2e8f0");
   const [skuOwnerCode, setSkuOwnerCode] = useState("CREW");
   const [invoiceLogoDataUrl, setInvoiceLogoDataUrl] = useState<string | undefined>(undefined);
   const [faviconDataUrl, setFaviconDataUrl] = useState<string | undefined>(undefined);
@@ -89,6 +93,7 @@ export function SetupWizardClient() {
   const [vdoRoomPrefix, setVdoRoomPrefix] = useState("");
   const [livekitUrl, setLivekitUrl] = useState("");
   const [radioChannels, setRadioChannels] = useState("");
+  const [radioLatchingEnabled, setRadioLatchingEnabled] = useState(false);
   const [invoiceNumberFormat, setInvoiceNumberFormat] = useState("");
   const [invoiceSequenceStart, setInvoiceSequenceStart] = useState("");
   const [enabledModules, setEnabledModules] = useState<ModuleId[]>(ALL_MODULE_IDS);
@@ -117,6 +122,7 @@ export function SetupWizardClient() {
           setBrand(inst.palette?.brand || "#5b8cff");
           setAccent(inst.palette?.accent || "#22c55e");
           setInvoiceBase(inst.palette?.invoiceBase || "#0b1220");
+          setInvoiceText(inst.palette?.invoiceText || "#e2e8f0");
           setSkuOwnerCode(inst.skuOwnerCode || "CREW");
           setInvoiceLogoDataUrl(inst.invoiceLogoDataUrl);
           setFaviconDataUrl(inst.faviconDataUrl);
@@ -130,6 +136,7 @@ export function SetupWizardClient() {
           setVdoRoomPrefix(inst.vdoRoomPrefix || "");
           setLivekitUrl(inst.livekitUrl || "");
           setRadioChannels((inst.radioChannels || []).join(", "));
+          setRadioLatchingEnabled(inst.radioLatchingEnabled ?? false);
           setInvoiceNumberFormat(inst.invoiceNumberFormat || "");
           setInvoiceSequenceStart(
             typeof inst.invoiceSequenceStart === "number" ? String(inst.invoiceSequenceStart) : ""
@@ -199,11 +206,12 @@ export function SetupWizardClient() {
             radioChannels: radioChannels.trim()
               ? radioChannels.split(",").map((s) => s.trim()).filter(Boolean)
               : undefined,
+            radioLatchingEnabled,
             invoiceNumberFormat,
             invoiceSequenceStart: invoiceSequenceStart.trim()
               ? Number.parseInt(invoiceSequenceStart.trim(), 10)
               : undefined,
-            palette: { brand, accent, invoiceBase },
+            palette: { brand, accent, invoiceBase, invoiceText },
             skuOwnerCode,
             enabledModules,
             setupComplete: true,
@@ -480,6 +488,29 @@ export function SetupWizardClient() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-300">
+                    Invoice text colour
+                  </label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={invoiceText}
+                      onChange={(e) => setInvoiceText(e.target.value)}
+                      className="h-10 w-12 rounded border border-white/10 bg-black/30"
+                      aria-label="Invoice text colour"
+                    />
+                    <input
+                      value={invoiceText}
+                      onChange={(e) => setInvoiceText(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Text colour for invoice/quote content.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
                     Invoice logo
                   </label>
                   <input
@@ -638,6 +669,23 @@ export function SetupWizardClient() {
                   <p className="mt-1 text-xs text-slate-600">
                     Comma-separated channel names. Leave blank for defaults (Main, Stage, Camera, Sound, Director). Use <code className="rounded bg-black/30 px-1">Label:room-name</code> to set a custom room ID.
                   </p>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-300">Allow latching mic mode</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      When enabled, participants whose display name matches a known username can switch from push-to-talk to latching (press once to transmit, press again to stop). PTT remains the default for everyone.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRadioLatchingEnabled((v) => !v)}
+                    className={`ml-4 shrink-0 relative h-6 w-11 rounded-full transition-colors ${radioLatchingEnabled ? "bg-brand/70" : "bg-slate-600"}`}
+                    aria-label="Toggle latching mic mode"
+                  >
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${radioLatchingEnabled ? "left-5" : "left-0.5"}`} />
+                  </button>
                 </div>
 
                 <div>

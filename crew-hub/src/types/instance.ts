@@ -4,7 +4,9 @@ export type ModuleId =
   | "shifts"
   | "hr"
   | "comms"
-  | "subcontractors";
+  | "subcontractors"
+  | "projects"
+  | "socials";
 
 export const ALL_MODULES: ModuleId[] = [
   "billing",
@@ -13,6 +15,8 @@ export const ALL_MODULES: ModuleId[] = [
   "hr",
   "comms",
   "subcontractors",
+  "projects",
+  "socials",
 ];
 
 export type InstancePalette = {
@@ -25,6 +29,8 @@ export type InstancePalette = {
    * When unset, invoices fall back to a neutral dark base.
    */
   invoiceBase?: string;
+  /** Invoice text / foreground colour. Hex like #e2e8f0. */
+  invoiceText?: string;
 };
 
 export type InstanceSettings = {
@@ -86,6 +92,11 @@ export type InstanceSettings = {
   livekitUrl?: string;
   /** Radio channel names shown in the comms radio page (comma-separated label:roomName pairs or just labels). */
   radioChannels?: string[];
+  /**
+   * When true, users whose display name matches a known username can select Latching mic mode.
+   * When false or undefined, everyone is locked to PTT.
+   */
+  radioLatchingEnabled?: boolean;
   /**
    * Set to true after the admin completes the initial setup wizard.
    * When false, the dashboard redirects admins to /admin/instance.

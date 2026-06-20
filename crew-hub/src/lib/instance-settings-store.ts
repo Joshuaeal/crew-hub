@@ -153,6 +153,7 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
         } catch { /* fall through */ }
         return undefined;
       })(),
+      radioLatchingEnabled: o.radioLatchingEnabled === true ? true : undefined,
       radioChannels: (() => {
         if (!Array.isArray(o.radioChannels)) return undefined;
         const ch = (o.radioChannels as unknown[])
