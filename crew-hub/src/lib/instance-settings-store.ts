@@ -127,6 +127,7 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
         : undefined,
       matrixClientUrl: isHttpUrl(o.matrixClientUrl) ? (o.matrixClientUrl as string).trim() : undefined,
       synapseAdminUrl: isHttpUrl(o.synapseAdminUrl) ? (o.synapseAdminUrl as string).trim() : undefined,
+      affineUrl: isHttpUrl(o.affineUrl) ? (o.affineUrl as string).trim() : undefined,
       uiCss: typeof o.uiCss === "string" && o.uiCss.trim() ? o.uiCss : undefined,
       invoiceSenderBlock:
         typeof o.invoiceSenderBlock === "string" && o.invoiceSenderBlock.trim()

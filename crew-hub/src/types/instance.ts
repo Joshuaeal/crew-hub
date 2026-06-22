@@ -6,7 +6,8 @@ export type ModuleId =
   | "comms"
   | "subcontractors"
   | "projects"
-  | "socials";
+  | "socials"
+  | "affine";
 
 export const ALL_MODULES: ModuleId[] = [
   "billing",
@@ -17,6 +18,7 @@ export const ALL_MODULES: ModuleId[] = [
   "subcontractors",
   "projects",
   "socials",
+  "affine",
 ];
 
 export type InstancePalette = {
@@ -85,6 +87,17 @@ export type InstanceSettings = {
    * Undefined (or empty) means all modules are enabled — default/backwards-compatible.
    */
   enabledModules?: ModuleId[];
+  /**
+   * Public URL of the self-hosted AFFiNE workspace (e.g. https://affine.yourdomain.com).
+   * Used for both the /workspace embed and inline project board links.
+   * Must be set before AFFiNE auth bridging will work.
+   */
+  affineUrl?: string;
+  /**
+   * AFFiNE admin email for server-side account provisioning.
+   * Used by /api/affine/session to create per-user AFFiNE accounts automatically.
+   * Store this in env (AFFINE_ADMIN_EMAIL) rather than instance settings for production.
+   */
   /**
    * LiveKit server WebSocket URL for radio comms.
    * Example: ws://localhost:7880 or wss://livekit.yourdomain.com

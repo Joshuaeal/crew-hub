@@ -24,6 +24,7 @@ export async function POST(request: Request, ctx: Ctx) {
     rate?: number;
     rateUnit?: string;
     confirmed?: boolean;
+    isOpen?: boolean;
   };
   try {
     body = await request.json();
@@ -42,6 +43,7 @@ export async function POST(request: Request, ctx: Ctx) {
     rate: typeof body.rate === "number" ? body.rate : undefined,
     rateUnit: body.rateUnit === "hourly" || body.rateUnit === "daily" ? body.rateUnit : undefined,
     confirmed: body.confirmed === true,
+    isOpen: body.isOpen === true,
   });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ project });

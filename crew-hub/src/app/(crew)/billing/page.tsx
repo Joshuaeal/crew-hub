@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { BillingDocumentsList } from "@/components/BillingDocumentsList";
 import { readBillingInvoices } from "@/lib/billing-store";
-import { billingDocumentTotal } from "@/types/billing";
+import { billingDocumentTotal, billingDocumentTotalLabel } from "@/types/billing";
 
 export default async function BillingPage() {
   const items = await readBillingInvoices();
@@ -15,6 +15,7 @@ export default async function BillingPage() {
     createdAt: inv.createdAt,
     currency: inv.currency,
     totalIncGst: billingDocumentTotal(inv),
+    totalLabel: billingDocumentTotalLabel(inv),
   }));
 
   return (

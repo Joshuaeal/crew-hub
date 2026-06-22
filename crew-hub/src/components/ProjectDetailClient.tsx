@@ -8,6 +8,8 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  Link2,
+  Link2Off,
   Loader2,
   Paperclip,
   Plus,
@@ -16,6 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { AffineEmbed } from "@/components/AffineEmbed";
 import type { Project, ProjectFile } from "@/types/projects";
 import { SpreadsheetImporter } from "@/components/SpreadsheetImporter";
 import {
@@ -71,6 +74,9 @@ type Props = {
   clientNames: Record<string, string>;
   clientList: { id: string; name: string }[];
   userList: { id: string; email: string; displayName?: string }[];
+  /** AFFiNE server URL from instance settings — used for the board embed. */
+  affineUrl?: string;
+  currentUserId?: string;
 };
 
 export function ProjectDetailClient({
@@ -80,6 +86,8 @@ export function ProjectDetailClient({
   clientNames,
   clientList,
   userList,
+  affineUrl,
+  currentUserId,
 }: Props) {
   const [project, setProject] = useState<Project>(initialProject);
   const [busy, setBusy] = useState(false);
@@ -101,6 +109,7 @@ export function ProjectDetailClient({
 
   // Talent form
   const [showTalentForm, setShowTalentForm] = useState(false);
+  const [talentFormMode, setTalentFormMode] = useState<"specific" | "open">("specific");
   const [tPersonId, setTPersonId] = useState("");
   const [tExtName, setTExtName] = useState("");
   const [tExtContact, setTExtContact] = useState("");
@@ -122,6 +131,11 @@ export function ProjectDetailClient({
 
   // Spreadsheet importer
   const [importTarget, setImportTarget] = useState<"talent" | "line-items" | null>(null);
+
+  // AFFiNE board link
+  const [affineEditUrl, setAffineEditUrl] = useState(project.affineDocUrl ?? "");
+  const [affineLinking, setAffineLinking] = useState(false);
+  const [affineShowEmbed, setAffineShowEmbed] = useState(Boolean(project.affineDocUrl));
 
   // Billing docs linked to this project
   type BillingRow = { id: string; kind: string; number: string; status: string; customerName: string; totalIncGst?: number };
@@ -254,18 +268,20 @@ export function ProjectDetailClient({
     if (!role) return;
     setBusy(true);
     try {
+      const isOpen = talentFormMode === "open";
       const r = await fetch(`/api/projects/${slug}/talent`, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          personId: tPersonId || undefined,
-          externalName: tExtName || undefined,
-          externalContact: tExtContact || undefined,
+          personId: isOpen ? undefined : (tPersonId || undefined),
+          externalName: isOpen ? undefined : (tExtName || undefined),
+          externalContact: isOpen ? undefined : (tExtContact || undefined),
           role,
           rate: tRate ? parseFloat(tRate) : undefined,
           rateUnit: tRate ? tRateUnit : undefined,
-          confirmed: tConfirmed,
+          confirmed: isOpen ? false : tConfirmed,
+          isOpen,
         }),
       });
       const d = await r.json();
@@ -273,7 +289,7 @@ export function ProjectDetailClient({
       setProject(d.project as Project);
       setShowTalentForm(false);
       setTPersonId(""); setTExtName(""); setTExtContact(""); setTRole(""); setTRate(""); setTRateUnit("daily"); setTConfirmed(false);
-      flash("Talent added.");
+      flash(isOpen ? "Open slot added." : "Talent added.");
     } catch (e) {
       flash(e instanceof Error ? e.message : "Failed", true);
     } finally {
@@ -300,6 +316,31 @@ export function ProjectDetailClient({
     const d = await r.json();
     if (r.ok) setProject(d.project as Project);
   }
+
+  async function respondToRequest(talentId: string, status: "accepted" | "declined") {
+    const r = await fetch(`/api/projects/${slug}/talent/${talentId}`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestStatus: status }),
+    });
+    const d = await r.json();
+    if (r.ok) setProject(d.project as Project);
+    else flash(d.error ?? "Failed", true);
+  }
+
+  async function claimOpenSlot(talentId: string) {
+    const r = await fetch(`/api/projects/${slug}/talent/${talentId}`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ claim: true }),
+    });
+    const d = await r.json();
+    if (r.ok) { setProject(d.project as Project); flash("Claimed — awaiting admin approval."); }
+    else flash(d.error ?? "Failed", true);
+  }
+
 
   async function addLineItem() {
     const desc = liDesc.trim();
@@ -601,6 +642,116 @@ export function ProjectDetailClient({
         </div>
         </section>
 
+        {/* AFFiNE Board */}
+        <section className="space-y-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Workspace Board</h2>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+            {project.affineDocUrl && affineShowEmbed ? (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-400">{project.affineDocUrl}</span>
+                  <a
+                    href={project.affineDocUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-300 ring-1 ring-white/10 hover:bg-white/10"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Open
+                  </a>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm("Unlink this AFFiNE board from the project?")) return;
+                        setAffineLinking(true);
+                        await fetch(`/api/projects/${slug}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ affineDocUrl: null }),
+                        });
+                        setProject((p) => ({ ...p, affineDocUrl: undefined }));
+                        setAffineEditUrl("");
+                        setAffineShowEmbed(false);
+                        setAffineLinking(false);
+                      }}
+                      disabled={affineLinking}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 ring-1 ring-red-500/20 hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      <Link2Off className="h-3 w-3" /> Unlink
+                    </button>
+                  )}
+                </div>
+                <div className="h-[80vh] rounded-lg overflow-hidden border border-white/10 flex flex-col">
+                  <AffineEmbed
+                    affineUrl={affineUrl}
+                    docPath={(() => {
+                      try {
+                        const u = new URL(project.affineDocUrl!);
+                        return u.pathname + u.search + u.hash;
+                      } catch {
+                        return undefined;
+                      }
+                    })()}
+                    title="Project Board"
+                  />
+                </div>
+              </>
+            ) : project.affineDocUrl ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-400">{project.affineDocUrl}</span>
+                <button
+                  type="button"
+                  onClick={() => setAffineShowEmbed(true)}
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-brand/90 ring-1 ring-brand/30 hover:bg-brand/10"
+                >
+                  <Link2 className="h-3 w-3" /> Show board
+                </button>
+              </div>
+            ) : canManage ? (
+              <div className="space-y-2">
+                <p className="text-sm text-slate-400">
+                  Link an AFFiNE board to embed it inline. Paste the AFFiNE document URL below.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <input
+                    type="url"
+                    placeholder="https://boards.raconteur.melbourne/workspace/…"
+                    value={affineEditUrl}
+                    onChange={(e) => setAffineEditUrl(e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand/50"
+                  />
+                  <button
+                    type="button"
+                    disabled={!affineEditUrl.trim() || affineLinking}
+                    onClick={async () => {
+                      const url = affineEditUrl.trim();
+                      if (!url) return;
+                      setAffineLinking(true);
+                      const res = await fetch(`/api/projects/${slug}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ affineDocUrl: url }),
+                      });
+                      if (res.ok) {
+                        const d = await res.json();
+                        setProject(d.project as Project);
+                        setAffineShowEmbed(true);
+                      }
+                      setAffineLinking(false);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand/20 px-3 py-2 text-sm font-medium text-brand/95 ring-1 ring-brand/30 hover:bg-brand/30 disabled:opacity-50"
+                  >
+                    {affineLinking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                    Link board
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">No AFFiNE board linked to this project.</p>
+            )}
+          </div>
+        </section>
+
         {/* Files */}
         <section className="space-y-4">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Files</h2>
@@ -697,7 +848,7 @@ export function ProjectDetailClient({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowTalentForm((v) => !v)}
+                  onClick={() => { setTalentFormMode("specific"); setShowTalentForm((v) => !v); }}
                   className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-slate-300 hover:bg-white/10"
                 >
                   <Users className="h-4 w-4" aria-hidden />
@@ -713,25 +864,44 @@ export function ProjectDetailClient({
                 </button>
               </div>
             )}
+            {canManage && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => { setTalentFormMode("open"); setShowTalentForm(true); }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/[0.02] px-4 py-2 text-sm text-slate-400 hover:bg-white/5 hover:text-slate-300"
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add open slot
+                </button>
+              </div>
+            )}
 
             {showTalentForm && (
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+                {talentFormMode === "open" && (
+                  <p className="text-xs text-amber-400/80">
+                    Open slot — any crew member can claim this role.
+                  </p>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs text-slate-400">Internal crew member</label>
-                    <select
-                      value={tPersonId}
-                      onChange={(e) => setTPersonId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
-                    >
-                      <option value="">External / no account</option>
-                      {userList.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.displayName ?? u.email}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {talentFormMode === "specific" && (
+                    <div>
+                      <label className="block text-xs text-slate-400">Internal crew member</label>
+                      <select
+                        value={tPersonId}
+                        onChange={(e) => setTPersonId(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
+                      >
+                        <option value="">External / no account</option>
+                        {userList.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.displayName ?? u.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs text-slate-400">Role</label>
                     <input
@@ -741,7 +911,7 @@ export function ProjectDetailClient({
                       className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
                     />
                   </div>
-                  {!tPersonId && (
+                  {talentFormMode === "specific" && !tPersonId && (
                     <>
                       <div>
                         <label className="block text-xs text-slate-400">External name</label>
@@ -791,17 +961,19 @@ export function ProjectDetailClient({
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-end">
-                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={tConfirmed}
-                        onChange={(e) => setTConfirmed(e.target.checked)}
-                        className="rounded accent-brand"
-                      />
-                      Confirmed
-                    </label>
-                  </div>
+                  {talentFormMode === "specific" && (
+                    <div className="flex items-end">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={tConfirmed}
+                          onChange={(e) => setTConfirmed(e.target.checked)}
+                          className="rounded accent-brand"
+                        />
+                        Confirmed
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -809,7 +981,7 @@ export function ProjectDetailClient({
                   onClick={() => void addTalent()}
                   className="rounded-lg bg-brand/90 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-brand/80 disabled:opacity-60"
                 >
-                  {busy ? "Adding…" : "Add"}
+                  {busy ? "Adding…" : talentFormMode === "open" ? "Add open slot" : "Add"}
                 </button>
               </div>
             )}
@@ -821,7 +993,11 @@ export function ProjectDetailClient({
             ) : (
               <ul className="space-y-2">
                 {project.talent.map((t) => {
-                  const display = t.personId
+                  const isMyEntry = !!currentUserId && t.personId === currentUserId;
+                  const isOpenSlot = t.isOpen && !t.personId;
+                  const display = isOpenSlot
+                    ? "Open slot"
+                    : t.personId
                     ? (userList.find((u) => u.id === t.personId)?.displayName ??
                       userList.find((u) => u.id === t.personId)?.email ??
                       t.personId)
@@ -829,13 +1005,33 @@ export function ProjectDetailClient({
                   return (
                     <li
                       key={t.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                      className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+                        isOpenSlot
+                          ? "border-amber-500/20 bg-amber-500/[0.04]"
+                          : "border-white/10 bg-white/[0.03]"
+                      }`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-medium text-white">{display}</p>
+                          <p className={`text-sm font-medium ${isOpenSlot ? "text-amber-300/80 italic" : "text-white"}`}>{display}</p>
                           <span className="text-xs text-slate-500">{t.role}</span>
-                          {t.confirmed ? (
+                          {isOpenSlot ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-400/80">
+                              <Circle className="h-3 w-3" /> Open for claims
+                            </span>
+                          ) : t.requestStatus === "pending" ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-400">
+                              <Circle className="h-3 w-3" /> Requested
+                            </span>
+                          ) : t.requestStatus === "accepted" ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                              <CheckCircle2 className="h-3 w-3" /> Accepted
+                            </span>
+                          ) : t.requestStatus === "declined" ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-red-400">
+                              <X className="h-3 w-3" /> Declined
+                            </span>
+                          ) : t.confirmed ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
                               <CheckCircle2 className="h-3 w-3" /> Confirmed
                             </span>
@@ -854,30 +1050,63 @@ export function ProjectDetailClient({
                           </p>
                         )}
                       </div>
-                      {canManage && (
-                        <div className="flex shrink-0 items-center gap-1">
+                      <div className="flex shrink-0 items-center gap-1">
+                        {/* Crew member: claim open slot */}
+                        {isOpenSlot && !canManage && (
                           <button
                             type="button"
-                            onClick={() => void toggleTalentConfirmed(t.id, t.confirmed)}
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-white/10 hover:text-white"
-                            title={t.confirmed ? "Mark unconfirmed" : "Mark confirmed"}
+                            onClick={() => void claimOpenSlot(t.id)}
+                            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/20"
                           >
-                            {t.confirmed ? (
-                              <X className="h-4 w-4" aria-hidden />
-                            ) : (
-                              <CheckCircle2 className="h-4 w-4" aria-hidden />
+                            Claim
+                          </button>
+                        )}
+                        {/* Crew member: respond to a request directed at them */}
+                        {isMyEntry && t.requestStatus === "pending" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void respondToRequest(t.id, "accepted")}
+                              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void respondToRequest(t.id, "declined")}
+                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/20"
+                            >
+                              Decline
+                            </button>
+                          </>
+                        )}
+                        {canManage && (
+                          <>
+                            {!isOpenSlot && (
+                              <button
+                                type="button"
+                                onClick={() => void toggleTalentConfirmed(t.id, t.confirmed)}
+                                className="rounded-lg p-1.5 text-slate-500 hover:bg-white/10 hover:text-white"
+                                title={t.confirmed ? "Mark unconfirmed" : "Mark confirmed"}
+                              >
+                                {t.confirmed ? (
+                                  <X className="h-4 w-4" aria-hidden />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                                )}
+                              </button>
                             )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void removeTalent(t.id)}
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/15 hover:text-red-300"
-                            aria-label="Remove"
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </button>
-                        </div>
-                      )}
+                            <button
+                              type="button"
+                              onClick={() => void removeTalent(t.id)}
+                              className="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/15 hover:text-red-300"
+                              aria-label="Remove"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </li>
                   );
                 })}
@@ -1248,6 +1477,7 @@ export function ProjectDetailClient({
             )}
           </div>
         </section>
+
       </div>
     </div>
 

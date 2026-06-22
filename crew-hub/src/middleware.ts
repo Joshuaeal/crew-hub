@@ -138,7 +138,8 @@ function isProtectedPath(pathname: string) {
     isCalendarPath(pathname) ||
     isAdminHubPath(pathname) ||
     isHrPath(pathname) ||
-    isSetupPath(pathname)
+    isSetupPath(pathname) ||
+    isCommsVdoPath(pathname)
   );
 }
 
@@ -308,6 +309,8 @@ export const config = {
     "/.well-known/matrix/:path*",
     "/subcontractor/invoices",
     "/subcontractor/invoices/:path*",
+    "/comms/vdo",
+    "/comms/vdo/:path*",
     "/synapse",
     "/synapse/:path*",
     "/admin/synapse",

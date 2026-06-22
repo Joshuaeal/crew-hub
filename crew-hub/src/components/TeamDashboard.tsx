@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Building2, Boxes, FileText, MessageSquare, Video } from "lucide-react";
+import { ArrowRight, Building2, Boxes, FileText, MessageSquare, Mic, Video } from "lucide-react";
 
 type Props = {
   canAccessHr: boolean;
@@ -145,6 +145,24 @@ export function TeamDashboard({
                 </span>
               </Link>
             )}
+
+            <Link
+              href="/comms/radio"
+              className="group flex flex-col rounded-2xl border border-orange-500/25 bg-orange-950/15 p-5 transition hover:border-orange-500/40 hover:bg-orange-950/25"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30">
+                  <Mic className="h-5 w-5" aria-hidden />
+                </span>
+                <span className="text-xs text-orange-300/90">LiveKit</span>
+              </div>
+              <h3 className="mt-3 font-semibold text-white">Radio comms</h3>
+              <p className="mt-1 flex-1 text-sm text-slate-400">Multi-channel PTT radio with mixer and transcription.</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-orange-300 group-hover:text-orange-200">
+                Open Radio
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden />
+              </span>
+            </Link>
           </div>
         </section>
       </div>

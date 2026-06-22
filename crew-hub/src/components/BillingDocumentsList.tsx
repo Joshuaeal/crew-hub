@@ -13,6 +13,7 @@ export type BillingDocRow = {
   createdAt: string;
   currency: string;
   totalIncGst: number;
+  totalLabel?: string;
 };
 
 export function BillingDocumentsList({ items }: { items: BillingDocRow[] }) {
@@ -64,7 +65,7 @@ export function BillingDocumentsList({ items }: { items: BillingDocRow[] }) {
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {new Date(inv.createdAt).toLocaleString()} · {inv.status} · {inv.currency}{" "}
-                  {inv.totalIncGst.toFixed(2)} inc GST
+                  {inv.totalLabel ?? inv.totalIncGst.toFixed(2)} inc GST
                 </p>
               </Link>
               <div className="flex shrink-0 flex-wrap items-center gap-2">

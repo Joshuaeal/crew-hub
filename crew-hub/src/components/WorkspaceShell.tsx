@@ -7,12 +7,14 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   FileText,
+  FolderKanban,
   LayoutDashboard,
   LogIn,
   LogOut,
   MessageSquare,
-  Radio,
   Mic,
+  PanelLeftClose,
+  PanelLeftOpen,
   Server,
   Shield,
   Calendar,
@@ -22,11 +24,16 @@ import {
   Building2,
   UserCircle,
   Video,
+  Share2,
+  PenSquare,
 } from "lucide-react";
 import {
+  canAccessAffine,
   canAccessHr,
+  canAccessProjects,
   canAccessSchedule,
   canAccessShiftsList,
+  canAccessSocials,
   hasPermission,
 } from "@/types/permissions";
 import type { CrewSession } from "@/lib/session";
@@ -96,12 +103,12 @@ export function WorkspaceShell({
   enabledModules,
 }: {
   children: React.ReactNode;
-  /** From server layout — avoids a signed-out flash and repeated “sign in per tile” when navigating. */
   initialSession: CrewSession | null;
   enabledModules?: string[];
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(false);
   const [session, setSession] = useState<Session | null>(() =>
     initialSession ? sessionFromServer(initialSession) : null,
   );
@@ -119,28 +126,26 @@ export function WorkspaceShell({
             role: data.role ?? null,
             email: data.email ?? null,
             username: data.username ?? null,
-            permissions: Array.isArray(data.permissions)
-              ? data.permissions
-              : [],
+            permissions: Array.isArray(data.permissions) ? data.permissions : [],
           });
         } else {
-          setSession({
-            authenticated: false,
-            role: null,
-            email: null,
-            username: null,
-            permissions: [],
+          // Only clear the session if we don't already have an authenticated one.
+          // Route-change refreshes should not log out a currently authenticated user
+          // — the server-provided initialSession is authoritative until an explicit
+          // logout or a real 401 from a protected API route.
+          setSession((prev) => {
+            if (prev?.authenticated) return prev;
+            return { authenticated: false, role: null, email: null, username: null, permissions: [] };
           });
         }
       })
       .catch(() => {
-        /* Keep existing session on transient errors — avoids fake logouts when switching routes. */
+        /* Keep existing session on transient errors. */
       });
   }, []);
 
   const skipInitialPathEffect = useRef(true);
   useEffect(() => {
-    /* Server already sent initialSession; skip one fetch on first paint to avoid churn/races. */
     if (skipInitialPathEffect.current) {
       skipInitialPathEffect.current = false;
       return;
@@ -159,29 +164,15 @@ export function WorkspaceShell({
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    refreshSession();
+    // Explicitly clear session state; don't rely on the refresh guard.
+    setSession({ authenticated: false, role: null, email: null, username: null, permissions: [] });
     setMobileOpen(false);
-    if (
-      pathname.startsWith("/subcontractor") ||
-      pathname.startsWith("/admin") ||
-      pathname.startsWith("/crew") ||
-      pathname.startsWith("/shifts") ||
-      pathname.startsWith("/calendar") ||
-      pathname.startsWith("/login") ||
-      pathname.startsWith("/comms") ||
-      pathname.startsWith("/synapse") ||
-      pathname.startsWith("/admin/synapse") ||
-      pathname.startsWith("/billing") ||
-      pathname.startsWith("/inventory") ||
-      pathname.startsWith("/hr")
-    ) {
-      window.location.href = "/";
-    }
+    window.location.href = "/";
   }
 
   const showCrewNav =
-    signedIn && modEnabled(enabledModules, "shifts") && (canAccessShiftsList(perms) || can(perms, "calendar"));
-
+    signedIn && modEnabled(enabledModules, "shifts") && canAccessShiftsList(perms);
+  const showSchedule = signedIn && canAccessSchedule(perms);
   const showComms = signedIn && modEnabled(enabledModules, "comms") && can(perms, "comms");
   const showVdoNinja =
     signedIn && modEnabled(enabledModules, "comms") &&
@@ -192,6 +183,9 @@ export function WorkspaceShell({
     signedIn && modEnabled(enabledModules, "inventory") &&
     (can(perms, "inventory") || can(perms, "inventory_request"));
   const showHr = signedIn && modEnabled(enabledModules, "hr") && canAccessHr(perms);
+  const showProjects = signedIn && modEnabled(enabledModules, "projects") && canAccessProjects(perms);
+  const showSocials = signedIn && modEnabled(enabledModules, "socials") && canAccessSocials(perms);
+  const showAffine = signedIn && modEnabled(enabledModules, "affine") && canAccessAffine(perms);
   const showAdminTools =
     signedIn && (can(perms, "shifts_manage") || can(perms, "users_manage"));
 
@@ -202,12 +196,10 @@ export function WorkspaceShell({
     const on = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
     const links: SectionLink[] = [];
 
-    // Public comms + VDO
     if (pathname.startsWith("/comms")) {
       links.push(
-        { href: "/comms", label: "Channels", icon: MessageSquare, active: on("/comms") && !pathname.startsWith("/comms/vdo") && !pathname.startsWith("/comms/transcribe"), visible: true },
-        { href: "/comms/vdo", label: "Production video", icon: Video, active: on("/comms/vdo"), visible: true },
-        { href: "/comms/transcribe", label: "Transcribe", icon: Radio, active: on("/comms/transcribe"), visible: true },
+        { href: "/comms", label: "Channels", icon: MessageSquare, active: on("/comms") && !pathname.startsWith("/comms/vdo") && !pathname.startsWith("/comms/radio"), visible: true },
+        { href: "/comms/vdo", label: "Production video", icon: Video, active: on("/comms/vdo"), visible: signedIn },
         { href: "/comms/radio", label: "Radio", icon: Mic, active: on("/comms/radio"), visible: true },
       );
     }
@@ -224,12 +216,20 @@ export function WorkspaceShell({
 
     if (signedIn && !isSubcontractor && pathname.startsWith("/billing")) {
       links.push(
-        { href: "/billing", label: "Documents", icon: Receipt, active: pathname === "/billing" || pathname.startsWith("/billing/") && !pathname.startsWith("/billing/clients") && !pathname.startsWith("/billing/catalog") && !pathname.startsWith("/billing/payables") && !pathname.startsWith("/billing/settings"), visible: showBilling },
+        { href: "/billing", label: "Documents", icon: Receipt, active: pathname === "/billing" || (pathname.startsWith("/billing/") && !pathname.startsWith("/billing/clients") && !pathname.startsWith("/billing/catalog") && !pathname.startsWith("/billing/payables") && !pathname.startsWith("/billing/settings")), visible: showBilling },
         { href: "/billing/new", label: "New invoice", icon: Receipt, active: on("/billing/new"), visible: showBilling },
         { href: "/billing/clients", label: "Clients", icon: Building2, active: on("/billing/clients"), visible: showBilling },
         { href: "/billing/catalog", label: "Catalog", icon: Boxes, active: on("/billing/catalog"), visible: showBilling },
         { href: "/billing/payables", label: "Payables", icon: FileText, active: on("/billing/payables"), visible: showBilling },
         { href: "/billing/settings", label: "Settings", icon: Shield, active: on("/billing/settings"), visible: showBilling },
+      );
+    }
+
+    if (signedIn && !isSubcontractor && pathname.startsWith("/projects")) {
+      const canManage = can(perms, "projects_manage");
+      links.push(
+        { href: "/projects", label: "All projects", icon: FolderKanban, active: pathname === "/projects", visible: showProjects },
+        { href: "/projects/new", label: "New project", icon: FolderKanban, active: pathname === "/projects/new", visible: showProjects && canManage },
       );
     }
 
@@ -258,60 +258,47 @@ export function WorkspaceShell({
       const canSynapse = can(perms, "embed_synapse");
       const canUsers = can(perms, "users_manage");
       links.push(
-        {
-          href: "/admin",
-          label: "Admin panel",
-          icon: Shield,
-          active: pathname === "/admin",
-          visible: true,
-        },
-        {
-          href: "/admin/users",
-          label: "Users",
-          icon: UserCircle,
-          active: on("/admin/users"),
-          visible: canUsers,
-        },
-        {
-          href: "/admin/members",
-          label: "Members",
-          icon: UserCircle,
-          active: on("/admin/members"),
-          visible: canUsers,
-        },
-        {
-          href: "/admin/hr-document-storage",
-          label: "HR storage",
-          icon: Building2,
-          active: on("/admin/hr-document-storage"),
-          visible: canUsers,
-        },
-        {
-          href: "/admin/synapse",
-          label: "Synapse admin",
-          icon: Server,
-          active: on("/admin/synapse"),
-          visible: canSynapse,
-        },
+        { href: "/admin", label: "Admin panel", icon: Shield, active: pathname === "/admin", visible: true },
+        { href: "/admin/users", label: "Users", icon: UserCircle, active: on("/admin/users"), visible: canUsers },
+        { href: "/admin/members", label: "Members", icon: UserCircle, active: on("/admin/members"), visible: canUsers },
+        { href: "/admin/hr-document-storage", label: "HR storage", icon: Building2, active: on("/admin/hr-document-storage"), visible: canUsers },
+        { href: "/admin/synapse", label: "Synapse admin", icon: Server, active: on("/admin/synapse"), visible: canSynapse },
       );
     }
 
     return links.filter((l) => l.visible);
   })();
 
-  const inSection = sectionLinks.length >= 2;
+  const toggleButton = (
+    <button
+      type="button"
+      onClick={() => setSidebarHidden((v) => !v)}
+      className="rounded-lg p-1.5 text-slate-500 hover:bg-white/5 hover:text-slate-300 transition"
+      aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+      title={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+    >
+      {sidebarHidden ? (
+        <PanelLeftOpen className="h-4 w-4" aria-hidden />
+      ) : (
+        <PanelLeftClose className="h-4 w-4" aria-hidden />
+      )}
+    </button>
+  );
 
   const sidebar = (
     <>
       <div className="border-b border-white/10 px-4 py-4">
-        <Link
-          href={homeHref}
-          className="flex flex-col gap-1"
-          onClick={() => setMobileOpen(false)}
-        >
-          <BrandLogo heightClass="h-9" priority />
-          <span className="sr-only">Crew Hub — home</span>
-        </Link>
+        <div className="flex items-start justify-between gap-2">
+          <Link
+            href={homeHref}
+            className="flex flex-col gap-1"
+            onClick={() => setMobileOpen(false)}
+          >
+            <BrandLogo heightClass="h-9" priority />
+            <span className="sr-only">Crew Hub — home</span>
+          </Link>
+          <div className="mt-1 shrink-0">{toggleButton}</div>
+        </div>
         <p className="mt-2 text-xs leading-snug text-slate-500">
           {signedIn && session?.username && (
             <span className="text-brand/90">
@@ -331,10 +318,11 @@ export function WorkspaceShell({
                   : "subcontractor"}
             </span>
           )}
-          {!signedIn && "Billing · Matrix · Shifts"}
         </p>
       </div>
+
       <nav className="flex-1 overflow-y-auto px-2 py-4">
+        {/* ── Main ── */}
         <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
           Main
         </p>
@@ -345,21 +333,7 @@ export function WorkspaceShell({
                 href="/comms"
                 label="Channels"
                 icon={MessageSquare}
-                active={isActive("/comms")}
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <NavLink
-                href="/comms/vdo"
-                label="Production video"
-                icon={Video}
-                active={pathname.startsWith("/comms/vdo")}
-                onNavigate={() => setMobileOpen(false)}
-              />
-              <NavLink
-                href="/comms/transcribe"
-                label="Transcribe"
-                icon={Radio}
-                active={pathname.startsWith("/comms/transcribe")}
+                active={isActive("/comms") && !pathname.startsWith("/comms/radio")}
                 onNavigate={() => setMobileOpen(false)}
               />
               <NavLink
@@ -407,6 +381,7 @@ export function WorkspaceShell({
           )}
         </div>
 
+        {/* ── In this section ── */}
         {sectionLinks.length >= 2 && (
           <>
             <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -427,352 +402,148 @@ export function WorkspaceShell({
           </>
         )}
 
-        {!signedIn && (
-          <div className="mt-4 space-y-2 px-3">
-            <Link
-              href="/login?next=/"
-              className="flex items-center justify-center gap-2 rounded-lg bg-brand/20 px-3 py-2 text-sm font-medium text-brand/95 ring-1 ring-brand/35 hover:bg-brand/30"
-              onClick={() => setMobileOpen(false)}
-            >
-              <LogIn className="h-4 w-4" aria-hidden />
-              Admin sign-in
-            </Link>
-            <Link
-              href="/subcontractor/login"
-              className="flex items-center justify-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/15 hover:bg-white/15"
-              onClick={() => setMobileOpen(false)}
-            >
-              <FileText className="h-4 w-4" aria-hidden />
-              Contractor sign-in
-            </Link>
-          </div>
-        )}
-
-        {signedIn && !isSubcontractor && (
+        {/* ── Crew ── */}
+        {signedIn && !isSubcontractor && (showCrewNav || showSchedule) && (
           <>
-            {inSection ? (
-              <details className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                <summary className="cursor-pointer select-none text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Other
-                </summary>
-                <div className="mt-3">
-                  {showCrewNav && (
-                    <>
-                      <p className="mb-2 px-0 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                        Crew
-                      </p>
-                      <div className="space-y-0.5">
-                        {canAccessShiftsList(perms) && (
-                          <NavLink
-                            href="/shifts"
-                            label="Shifts"
-                            icon={ClipboardList}
-                            active={pathname === "/shifts"}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {canAccessSchedule(perms) && (
-                          <NavLink
-                            href="/calendar"
-                            label="Schedule"
-                            icon={Calendar}
-                            active={isActive("/calendar")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {(showComms ||
-                    showVdoNinja ||
-                    showBilling ||
-                    showContractors ||
-                    showInventory ||
-                    showHr) && (
-                    <>
-                      <p className="mb-2 mt-6 px-0 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                        Native (team)
-                      </p>
-                      <div className="space-y-0.5">
-                        {showHr && (
-                          <>
-                            <NavLink
-                              href="/hr"
-                              label="HR"
-                              icon={Building2}
-                              active={
-                                isActive("/hr") && !pathname.startsWith("/hr/profile")
-                              }
-                              onNavigate={() => setMobileOpen(false)}
-                            />
-                            <NavLink
-                              href="/hr/profile"
-                              label="My profile"
-                              icon={UserCircle}
-                              active={
-                                pathname === "/hr/profile" ||
-                                pathname.startsWith("/hr/profile/")
-                              }
-                              onNavigate={() => setMobileOpen(false)}
-                            />
-                          </>
-                        )}
-                        {showComms && (
-                          <NavLink
-                            href="/comms"
-                            label="Matrix channels"
-                            icon={MessageSquare}
-                            active={
-                              isActive("/comms") &&
-                              !pathname.startsWith("/comms/vdo")
-                            }
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {showVdoNinja && (
-                          <NavLink
-                            href="/comms/vdo"
-                            label="Production video"
-                            icon={Video}
-                            active={pathname.startsWith("/comms/vdo")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {showComms && (
-                          <NavLink
-                            href="/comms/transcribe"
-                            label="Transcribe"
-                            icon={Radio}
-                            active={pathname.startsWith("/comms/transcribe")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {showComms && (
-                          <NavLink
-                            href="/comms/radio"
-                            label="Radio"
-                            icon={Mic}
-                            active={pathname.startsWith("/comms/radio")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {showContractors && (
-                          <NavLink
-                            href="/contractors"
-                            label="Contractors"
-                            icon={FileText}
-                            active={isActive("/contractors")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {showBilling && (
-                          <NavLink
-                            href="/billing"
-                            label="Billing"
-                            icon={Receipt}
-                            active={isActive("/billing")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {showInventory && (
-                          <NavLink
-                            href="/inventory"
-                            label="Inventory"
-                            icon={Boxes}
-                            active={isActive("/inventory")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {showAdminTools && (
-                    <>
-                      <p className="mb-2 mt-6 px-0 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                        Admin
-                      </p>
-                      <div className="space-y-0.5">
-                        <NavLink
-                          href="/admin"
-                          label="Admin panel"
-                          icon={Shield}
-                          active={
-                            pathname === "/admin" ||
-                            pathname.startsWith("/admin/hr-document-storage")
-                          }
-                          onNavigate={() => setMobileOpen(false)}
-                        />
-                        <NavLink
-                          href="/setup"
-                          label="Setup"
-                          icon={Shield}
-                          active={isActive("/setup")}
-                          onNavigate={() => setMobileOpen(false)}
-                        />
-                        {can(perms, "embed_synapse") && (
-                          <NavLink
-                            href="/admin/synapse"
-                            label="Synapse admin"
-                            icon={Server}
-                            active={isActive("/admin/synapse")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {can(perms, "shifts_manage") && (
-                          <NavLink
-                            href="/shifts/manage"
-                            label="Manage shifts"
-                            icon={ClipboardList}
-                            active={isActive("/shifts/manage")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                        {can(perms, "users_manage") && (
-                          <NavLink
-                            href="/inventory/requests"
-                            label="Stock approvals"
-                            icon={Boxes}
-                            active={isActive("/inventory/requests")}
-                            onNavigate={() => setMobileOpen(false)}
-                          />
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </details>
-            ) : (
-              <>
-                {showCrewNav && (
-                  <>
-                    <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                      Crew
-                    </p>
-                    <div className="space-y-0.5">
-                      {canAccessShiftsList(perms) && (
-                        <NavLink
-                          href="/shifts"
-                          label="Shifts"
-                          icon={ClipboardList}
-                          active={pathname === "/shifts"}
-                          onNavigate={() => setMobileOpen(false)}
-                        />
-                      )}
-                      {canAccessSchedule(perms) && (
-                        <NavLink
-                          href="/calendar"
-                          label="Schedule"
-                          icon={Calendar}
-                          active={isActive("/calendar")}
-                          onNavigate={() => setMobileOpen(false)}
-                        />
-                      )}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
+            <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Crew
+            </p>
+            <div className="space-y-0.5">
+              {showCrewNav && (
+                <NavLink
+                  href="/shifts"
+                  label="Shifts"
+                  icon={ClipboardList}
+                  active={pathname === "/shifts"}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showSchedule && (
+                <NavLink
+                  href="/calendar"
+                  label="Schedule"
+                  icon={Calendar}
+                  active={isActive("/calendar")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+            </div>
           </>
         )}
 
-        {!inSection && !isSubcontractor &&
-          (showComms ||
-            showVdoNinja ||
-            showBilling ||
-            showContractors ||
-            showInventory ||
-            showHr) && (
-            <>
-              <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                Native (team)
-              </p>
-              <div className="space-y-0.5">
-                {showHr && (
-                  <>
-                    <NavLink
-                      href="/hr"
-                      label="HR"
-                      icon={Building2}
-                      active={
-                        isActive("/hr") && !pathname.startsWith("/hr/profile")
-                      }
-                      onNavigate={() => setMobileOpen(false)}
-                    />
-                    <NavLink
-                      href="/hr/profile"
-                      label="My profile"
-                      icon={UserCircle}
-                      active={
-                        pathname === "/hr/profile" ||
-                        pathname.startsWith("/hr/profile/")
-                      }
-                      onNavigate={() => setMobileOpen(false)}
-                    />
-                  </>
-                )}
-                {showComms && (
+        {/* ── Native (team) ── */}
+        {signedIn && !isSubcontractor &&
+          (showComms || showVdoNinja || showBilling || showContractors || showInventory || showHr || showProjects || showSocials) && (
+          <>
+            <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Native (team)
+            </p>
+            <div className="space-y-0.5">
+              {showHr && (
+                <>
                   <NavLink
-                    href="/comms"
-                    label="Matrix channels"
-                    icon={MessageSquare}
-                    active={
-                      isActive("/comms") && !pathname.startsWith("/comms/vdo")
-                    }
+                    href="/hr"
+                    label="HR"
+                    icon={Building2}
+                    active={isActive("/hr") && !pathname.startsWith("/hr/profile")}
                     onNavigate={() => setMobileOpen(false)}
                   />
-                )}
-                {showVdoNinja && (
                   <NavLink
-                    href="/comms/vdo"
-                    label="Production video"
-                    icon={Video}
-                    active={pathname.startsWith("/comms/vdo")}
+                    href="/hr/profile"
+                    label="My profile"
+                    icon={UserCircle}
+                    active={pathname === "/hr/profile" || pathname.startsWith("/hr/profile/")}
                     onNavigate={() => setMobileOpen(false)}
                   />
-                )}
-                {showComms && (
-                  <NavLink
-                    href="/comms/transcribe"
-                    label="Transcribe"
-                    icon={Radio}
-                    active={pathname.startsWith("/comms/transcribe")}
-                    onNavigate={() => setMobileOpen(false)}
-                  />
-                )}
-                {showContractors && (
-                  <NavLink
-                    href="/contractors"
-                    label="Contractors"
-                    icon={FileText}
-                    active={isActive("/contractors")}
-                    onNavigate={() => setMobileOpen(false)}
-                  />
-                )}
-                {showBilling && (
-                  <NavLink
-                    href="/billing"
-                    label="Billing"
-                    icon={Receipt}
-                    active={isActive("/billing")}
-                    onNavigate={() => setMobileOpen(false)}
-                  />
-                )}
-                {showInventory && (
-                  <NavLink
-                    href="/inventory"
-                    label="Inventory"
-                    icon={Boxes}
-                    active={isActive("/inventory")}
-                    onNavigate={() => setMobileOpen(false)}
-                  />
-                )}
-              </div>
-            </>
-          )}
+                </>
+              )}
+              {showComms && (
+                <NavLink
+                  href="/comms"
+                  label="Matrix channels"
+                  icon={MessageSquare}
+                  active={isActive("/comms") && !pathname.startsWith("/comms/vdo")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showVdoNinja && (
+                <NavLink
+                  href="/comms/vdo"
+                  label="Production video"
+                  icon={Video}
+                  active={pathname.startsWith("/comms/vdo")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showComms && (
+                <NavLink
+                  href="/comms/radio"
+                  label="Radio"
+                  icon={Mic}
+                  active={pathname.startsWith("/comms/radio")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showContractors && (
+                <NavLink
+                  href="/contractors"
+                  label="Contractors"
+                  icon={FileText}
+                  active={isActive("/contractors")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showBilling && (
+                <NavLink
+                  href="/billing"
+                  label="Billing"
+                  icon={Receipt}
+                  active={isActive("/billing")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showInventory && (
+                <NavLink
+                  href="/inventory"
+                  label="Inventory"
+                  icon={Boxes}
+                  active={isActive("/inventory")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showProjects && (
+                <NavLink
+                  href="/projects"
+                  label="Projects"
+                  icon={FolderKanban}
+                  active={isActive("/projects")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showSocials && (
+                <NavLink
+                  href="/socials"
+                  label="Socials"
+                  icon={Share2}
+                  active={isActive("/socials")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showAffine && (
+                <NavLink
+                  href="/workspace"
+                  label="Workspace"
+                  icon={PenSquare}
+                  active={isActive("/workspace")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+            </div>
+          </>
+        )}
 
-        {!inSection && !isSubcontractor && showAdminTools && (
+        {/* ── Admin ── */}
+        {signedIn && !isSubcontractor && showAdminTools && (
           <>
             <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Admin
@@ -782,10 +553,14 @@ export function WorkspaceShell({
                 href="/admin"
                 label="Admin panel"
                 icon={Shield}
-                active={
-                  pathname === "/admin" ||
-                  pathname.startsWith("/admin/hr-document-storage")
-                }
+                active={pathname === "/admin" || pathname.startsWith("/admin/hr-document-storage")}
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <NavLink
+                href="/setup"
+                label="Setup"
+                icon={Shield}
+                active={isActive("/setup")}
                 onNavigate={() => setMobileOpen(false)}
               />
               {can(perms, "embed_synapse") && (
@@ -819,9 +594,7 @@ export function WorkspaceShell({
           </>
         )}
 
-        {/* Contractor sign-in is shown in the logged-out block above.
-            Subcontractors get their own simplified Main nav. */}
-
+        {/* ── Access ── */}
         <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
           Access
         </p>
@@ -830,7 +603,7 @@ export function WorkspaceShell({
             <NavLink
               href="/login"
               label="Sign in"
-              icon={Shield}
+              icon={LogIn}
               active={isActive("/login")}
               onNavigate={() => setMobileOpen(false)}
             />
@@ -847,6 +620,7 @@ export function WorkspaceShell({
           )}
         </div>
 
+        {/* ── Help ── */}
         <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
           Help
         </p>
@@ -865,6 +639,7 @@ export function WorkspaceShell({
 
   return (
     <div className="flex h-dvh w-full flex-col bg-[#060405] text-slate-100 md:flex-row">
+      {/* Mobile header */}
       <header className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#060405]/95 px-4 py-3 backdrop-blur md:hidden">
         <Link
           href={homeHref}
@@ -905,6 +680,7 @@ export function WorkspaceShell({
         </button>
       </header>
 
+      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           <button
@@ -919,9 +695,25 @@ export function WorkspaceShell({
         </div>
       )}
 
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-nav md:flex lg:w-64">
-        {sidebar}
-      </aside>
+      {/* Desktop sidebar — fully hidden when sidebarHidden */}
+      {!sidebarHidden && (
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-nav md:flex lg:w-64">
+          {sidebar}
+        </aside>
+      )}
+
+      {/* Edge tab to restore hidden sidebar */}
+      {sidebarHidden && (
+        <button
+          type="button"
+          onClick={() => setSidebarHidden(false)}
+          aria-label="Show sidebar"
+          title="Show sidebar"
+          className="fixed left-0 top-1/2 z-40 hidden -translate-y-1/2 items-center justify-center rounded-r-lg border border-l-0 border-white/10 bg-nav px-1.5 py-3 text-slate-400 shadow-lg hover:text-white transition md:flex"
+        >
+          <PanelLeftOpen className="h-4 w-4" aria-hidden />
+        </button>
+      )}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
         {children}

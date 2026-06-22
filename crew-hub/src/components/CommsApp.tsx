@@ -18,6 +18,13 @@ import {
   normalizeMatrixLoginIdentifier,
 } from "@/lib/matrix-login";
 
+type InitialAuth = {
+  accessToken: string;
+  userId: string;
+  homeserverUrl: string;
+  deviceId?: string;
+};
+
 type Props = {
   defaultHomeserver: string;
   /** Synapse server_name / MXID domain (e.g. localhost) — must match CREW_SYNAPSE_SERVER_NAME. */
@@ -28,6 +35,8 @@ type Props = {
   matrixUsesHubProxy: boolean;
   /** Optional room id (`!xxx:server`) to select after sync when already joined — `CREW_MATRIX_DEFAULT_ROOM_ID`. */
   preferredRoomId?: string;
+  /** When provided, skip the login form and connect immediately with these credentials. */
+  initialAuth?: InitialAuth;
 };
 
 function matrixConnectErrorMessage(err: unknown, matrixDomain: string): string {
@@ -64,6 +73,7 @@ export function CommsApp({
   matrixSyncEnabled,
   matrixUsesHubProxy,
   preferredRoomId,
+  initialAuth,
 }: Props) {
   const [homeserver, setHomeserver] = useState(
     defaultHomeserver.replace(/\/$/, ""),
@@ -91,6 +101,31 @@ export function CommsApp({
 
   const refreshJoinedRooms = useCallback((c: MatrixClient) => {
     setRooms(c.getRooms().filter((r) => r.getMyMembership() === "join"));
+  }, []);
+
+  // Auto-connect when the server provides credentials (skips login form)
+  useEffect(() => {
+    if (!initialAuth) return;
+    const { accessToken, userId, homeserverUrl, deviceId } = initialAuth;
+    const c = createClient({
+      baseUrl: homeserverUrl.replace(/\/$/, ""),
+      accessToken,
+      userId,
+      deviceId,
+    });
+    c.on(ClientEvent.Sync, (state) => {
+      setSyncState(state);
+      refreshJoinedRooms(c);
+    });
+    c.on(RoomEvent.MyMembership, () => {
+      refreshJoinedRooms(c);
+    });
+    c.startClient({ initialSyncLimit: 30 });
+    defaultRoomAppliedRef.current = false;
+    setClient(c);
+    setHomeserver(homeserverUrl.replace(/\/$/, ""));
+    return () => { c.stopClient(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeRoom = useMemo(
@@ -138,6 +173,14 @@ export function CommsApp({
     }
   }, [client, rooms, preferred]);
 
+  // If sync drops the active room before its membership event arrives, rescue it
+  useEffect(() => {
+    if (!activeRoomId || !client) return;
+    if (rooms.some((r) => r.roomId === activeRoomId)) return;
+    const room = client.getRoom(activeRoomId);
+    if (room) setRooms((prev) => (prev.some((r) => r.roomId === room.roomId) ? prev : [...prev, room]));
+  }, [rooms, activeRoomId, client]);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -180,7 +223,12 @@ export function CommsApp({
       setError(null);
       try {
         const room = await client.joinRoom(fullAlias);
-        refreshJoinedRooms(client);
+        // Fetch room state so name/members/timeline are populated before we display it
+        try { await client.roomState(room.roomId); } catch { /* best-effort */ }
+        // Add immediately — sync may lag behind the join
+        setRooms((prev) =>
+          prev.some((r) => r.roomId === room.roomId) ? prev : [...prev, room],
+        );
         setActiveRoomId(room.roomId);
       } catch (err) {
         const msg =
@@ -377,7 +425,7 @@ export function CommsApp({
           <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Rooms
           </p>
-          <div className="max-h-44 overflow-y-auto md:max-h-64 md:flex-1">
+          <div className="flex-1 overflow-y-auto">
             {rooms.length === 0 ? (
               <div className="space-y-3 px-3 pb-3">
                 <p className="text-xs leading-snug text-slate-500">
@@ -391,7 +439,7 @@ export function CommsApp({
                   <summary className="cursor-pointer px-2 py-1.5 font-medium text-slate-300">
                     Join from Raconteur blueprint
                   </summary>
-                  <div className="max-h-40 space-y-1 overflow-y-auto border-t border-white/10 p-2">
+                  <div className="space-y-1 overflow-y-auto border-t border-white/10 p-2">
                     {joinHints.map((h) => (
                       <button
                         key={h.id}
@@ -514,7 +562,9 @@ export function CommsApp({
             <>
               <div className="border-b border-white/10 px-3 py-2">
                 <h2 className="truncate font-medium text-white">
-                  {activeRoom.name || "Room"}
+                  {activeRoom.name?.startsWith("!")
+                    ? activeRoom.roomId
+                    : activeRoom.name || activeRoom.roomId}
                 </h2>
               </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">

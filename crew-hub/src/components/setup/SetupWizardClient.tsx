@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
-type ModuleId = "billing" | "inventory" | "shifts" | "hr" | "comms" | "subcontractors" | "projects" | "socials";
+type ModuleId = "billing" | "inventory" | "shifts" | "hr" | "comms" | "subcontractors" | "projects" | "socials" | "affine";
 
 const MODULES: { id: ModuleId; label: string; desc: string }[] = [
   { id: "billing", label: "Invoicing & Billing", desc: "Create and manage invoices, quotes, clients, catalog, and payables." },
@@ -14,6 +14,7 @@ const MODULES: { id: ModuleId; label: string; desc: string }[] = [
   { id: "subcontractors", label: "Subcontractor Portal", desc: "Let subcontractors log in, submit invoice PDFs, and access production video." },
   { id: "projects", label: "Projects", desc: "Manage productions as projects — files, talent, pricing, milestones, and invoice generation." },
   { id: "socials", label: "Socials", desc: "Track when your team last posted on Instagram, Facebook, and LinkedIn — a simple manual posting log." },
+  { id: "affine", label: "Workspace (AFFiNE)", desc: "Self-hosted AFFiNE boards embedded in Crew Hub — collaborative docs and whiteboards. Requires a separate AFFiNE server." },
 ];
 
 const ALL_MODULE_IDS: ModuleId[] = MODULES.map((m) => m.id);
@@ -39,6 +40,7 @@ type InstanceSettings = {
   livekitUrl?: string;
   radioChannels?: string[];
   radioLatchingEnabled?: boolean;
+  affineUrl?: string;
   updatedAt: string;
 };
 
@@ -92,6 +94,7 @@ export function SetupWizardClient() {
   const [vdoRoomPassword, setVdoRoomPassword] = useState("");
   const [vdoRoomPrefix, setVdoRoomPrefix] = useState("");
   const [livekitUrl, setLivekitUrl] = useState("");
+  const [affineUrl, setAffineUrl] = useState("");
   const [radioChannels, setRadioChannels] = useState("");
   const [radioLatchingEnabled, setRadioLatchingEnabled] = useState(false);
   const [invoiceNumberFormat, setInvoiceNumberFormat] = useState("");
@@ -135,6 +138,7 @@ export function SetupWizardClient() {
           setVdoRoomPassword(inst.vdoRoomPassword || "");
           setVdoRoomPrefix(inst.vdoRoomPrefix || "");
           setLivekitUrl(inst.livekitUrl || "");
+          setAffineUrl(inst.affineUrl || "");
           setRadioChannels((inst.radioChannels || []).join(", "));
           setRadioLatchingEnabled(inst.radioLatchingEnabled ?? false);
           setInvoiceNumberFormat(inst.invoiceNumberFormat || "");
@@ -203,6 +207,7 @@ export function SetupWizardClient() {
             vdoRoomPassword,
             vdoRoomPrefix,
             livekitUrl,
+            affineUrl,
             radioChannels: radioChannels.trim()
               ? radioChannels.split(",").map((s) => s.trim()).filter(Boolean)
               : undefined,
@@ -638,6 +643,24 @@ export function SetupWizardClient() {
                   />
                   <p className="mt-1 text-xs text-slate-600">
                     Where the synapse-admin web UI is published (reverse proxy or tunnel).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    AFFiNE Workspace URL
+                  </label>
+                  <input
+                    type="url"
+                    value={affineUrl}
+                    onChange={(e) => setAffineUrl(e.target.value)}
+                    placeholder="https://affine.yourdomain.com"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-xs text-slate-600">
+                    Public HTTPS URL of your self-hosted AFFiNE server. Required for the Workspace module and project board embeds.
+                    Also set <code className="rounded bg-black/30 px-1">AFFINE_ADMIN_EMAIL</code> and{" "}
+                    <code className="rounded bg-black/30 px-1">AFFINE_ADMIN_PASSWORD</code> to auto-provision user accounts (users log in with their Crew Hub email and password).
                   </p>
                 </div>
 

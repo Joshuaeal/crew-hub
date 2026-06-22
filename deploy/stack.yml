@@ -128,6 +128,94 @@ services:
       restart_policy:
         condition: on-failure
 
+  # ── AFFiNE self-hosted workspace ──────────────────────────────────────────────
+  # AFFiNE is a separate full-stack service (its own Postgres + Redis) exposed at
+  # a dedicated subdomain (e.g. affine.alegrevisual.com) behind the same Cloudflare
+  # Tunnel / reverse proxy used by the rest of the stack.
+  #
+  # Reverse proxy notes (apply to whichever proxy terminates TLS for this stack):
+  #   • Must proxy WebSocket upgrades (Upgrade / Connection: upgrade headers) — AFFiNE's
+  #     real-time sync and collaboration depend on WSS; a proxy that passes HTTP but not WS
+  #     will produce a broken-feeling app (page loads, collab silently fails).
+  #   • Set AFFINE_SERVER_EXTERNAL_URL before first run — changing it after data exists
+  #     causes broken internal links; it is baked into stored document URLs.
+  #
+  # To enable: remove the leading '#' from each affine* block, deploy the stack, then in
+  # Admin → Instance Settings set the AFFiNE URL to https://affine.yourdomain.com.
+  #
+  # Set these in your .env / Docker Swarm secrets / Portainer env:
+  #   AFFINE_DB_PASSWORD      strong password for the affine Postgres user
+  #   AFFINE_ADMIN_EMAIL      email of the initial AFFiNE admin account
+  #   AFFINE_ADMIN_PASSWORD   password for that admin account
+  #   AFFINE_EXTERNAL_URL     https://affine.yourdomain.com (confirm subdomain with Josh)
+  #   AFFINE_NODE_HOSTNAME    (optional) pin to a specific swarm node for stable volume access
+
+  # affine:
+  #   image: ghcr.io/toeverything/affine-graphql:stable
+  #   depends_on:
+  #     - affine-postgres
+  #     - affine-redis
+  #   ports:
+  #     - target: 3010
+  #       published: ${AFFINE_PORT:-3010}
+  #       protocol: tcp
+  #       mode: ingress
+  #   environment:
+  #     NODE_OPTIONS: "--import=./scripts/register.cjs"
+  #     AFFINE_CONFIG_PATH: /root/.affine/config
+  #     REDIS_SERVER_HOST: affine-redis
+  #     DATABASE_URL: "postgresql://affine:${AFFINE_DB_PASSWORD:-changeme}@affine-postgres:5432/affine"
+  #     NODE_ENV: production
+  #     AFFINE_ADMIN_EMAIL: "${AFFINE_ADMIN_EMAIL:-}"
+  #     AFFINE_ADMIN_PASSWORD: "${AFFINE_ADMIN_PASSWORD:-}"
+  #     # IMPORTANT: must be the public HTTPS URL — set before first run
+  #     AFFINE_SERVER_EXTERNAL_URL: "${AFFINE_EXTERNAL_URL:-https://affine.example.com}"
+  #     # Disable open registration — admin-created accounts only (consistent with Crew Hub)
+  #     AFFINE_AUTH_EMAIL_ENABLED: "true"
+  #   volumes:
+  #     - affine_config:/root/.affine/config
+  #     - affine_blobs:/root/.affine/storage
+  #   networks:
+  #     - crew_net
+  #   deploy:
+  #     replicas: 1
+  #     restart_policy:
+  #       condition: on-failure
+  #     placement:
+  #       constraints:
+  #         - "node.hostname == ${AFFINE_NODE_HOSTNAME:-}"
+
+  # affine-postgres:
+  #   image: postgres:16
+  #   environment:
+  #     POSTGRES_USER: affine
+  #     POSTGRES_PASSWORD: "${AFFINE_DB_PASSWORD:-changeme}"
+  #     POSTGRES_DB: affine
+  #     PGDATA: /var/lib/postgresql/data/pgdata
+  #   volumes:
+  #     - affine_pg_data:/var/lib/postgresql/data/pgdata
+  #   networks:
+  #     - crew_net
+  #   deploy:
+  #     replicas: 1
+  #     restart_policy:
+  #       condition: on-failure
+  #     placement:
+  #       constraints:
+  #         # Pin to same node as affine service so the pgdata volume is co-located
+  #         - "node.hostname == ${AFFINE_NODE_HOSTNAME:-}"
+
+  # affine-redis:
+  #   image: redis:7
+  #   volumes:
+  #     - affine_redis_data:/data
+  #   networks:
+  #     - crew_net
+  #   deploy:
+  #     replicas: 1
+  #     restart_policy:
+  #       condition: on-failure
+
 networks:
   crew_net:
     driver: overlay
@@ -145,3 +233,28 @@ volumes:
       type: "nfs"
       o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
       device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/synapse"
+  # Uncomment when enabling the affine* services above:
+  # affine_config:
+  #   driver: local
+  #   driver_opts:
+  #     type: "nfs"
+  #     o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
+  #     device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/affine-config"
+  # affine_blobs:
+  #   driver: local
+  #   driver_opts:
+  #     type: "nfs"
+  #     o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
+  #     device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/affine-blobs"
+  # affine_pg_data:
+  #   driver: local
+  #   driver_opts:
+  #     type: "nfs"
+  #     o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
+  #     device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/affine-postgres"
+  # affine_redis_data:
+  #   driver: local
+  #   driver_opts:
+  #     type: "nfs"
+  #     o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
+  #     device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/affine-redis"

@@ -83,6 +83,7 @@ export async function PATCH(request: Request) {
     livekitUrl: typeof patch.livekitUrl === "string" ? patch.livekitUrl : undefined,
     radioChannels: Array.isArray(patch.radioChannels) ? (patch.radioChannels as string[]) : undefined,
     radioLatchingEnabled: typeof patch.radioLatchingEnabled === "boolean" ? patch.radioLatchingEnabled : undefined,
+    affineUrl: typeof patch.affineUrl === "string" ? patch.affineUrl : undefined,
   });
 
   return NextResponse.json({ settings: next });

@@ -52,6 +52,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
     status?: string;
     followUpEnabled?: boolean;
     followUpIntervalDays?: number[];
+    usePackages?: boolean;
+    packages?: unknown;
   };
   try {
     body = await request.json();
@@ -90,6 +92,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
     }
     patch.status = body.status;
   }
+  if (body.usePackages !== undefined) patch.usePackages = body.usePackages;
+  if (body.packages !== undefined) patch.packages = body.packages;
 
   const updated = await updateBillingInvoice(ctx.params.id, patch);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });

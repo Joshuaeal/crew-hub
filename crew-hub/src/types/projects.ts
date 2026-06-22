@@ -25,6 +25,9 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export const MILESTONE_STATUSES = ["Pending", "Done"] as const;
 export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number];
 
+export const TALENT_REQUEST_STATUSES = ["pending", "accepted", "declined"] as const;
+export type TalentRequestStatus = (typeof TALENT_REQUEST_STATUSES)[number];
+
 export type ProjectTalent = {
   id: string;
   /** Nullable — internal crew member by user id */
@@ -36,6 +39,10 @@ export type ProjectTalent = {
   rate?: number;
   rateUnit?: "hourly" | "daily";
   confirmed: boolean;
+  /** Set when an internal crew member is added — awaiting their response */
+  requestStatus?: TalentRequestStatus;
+  /** True when slot is open for any crew member to claim */
+  isOpen?: boolean;
 };
 
 export type ProjectLineItem = {
@@ -69,6 +76,8 @@ export type Project = {
   createdByEmail: string;
   createdAt: string;
   updatedAt: string;
+  /** URL of a linked AFFiNE document/board for this project. */
+  affineDocUrl?: string;
   talent: ProjectTalent[];
   lineItems: ProjectLineItem[];
   milestones: ProjectMilestone[];

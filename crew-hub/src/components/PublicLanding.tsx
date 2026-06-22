@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, MessageSquare, Video, LogIn, FileText } from "lucide-react";
+import { ArrowRight, MessageSquare, LogIn, Mic } from "lucide-react";
 
 export function PublicLanding() {
   return (
@@ -8,7 +8,7 @@ export function PublicLanding() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Crew Hub</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-base">
-            Public tools: channels and production video. Sign in for HR, inventory, and admin tools.
+            Public tools: channels and radio. Sign in for the full workspace.
           </p>
         </div>
 
@@ -34,21 +34,21 @@ export function PublicLanding() {
             </Link>
 
             <Link
-              href="/comms/vdo"
-              className="group flex flex-col rounded-2xl border border-cyan-500/25 bg-cyan-950/15 p-5 transition hover:border-cyan-500/40 hover:bg-cyan-950/25"
+              href="/comms/radio"
+              className="group flex flex-col rounded-2xl border border-orange-500/25 bg-orange-950/15 p-5 transition hover:border-orange-500/40 hover:bg-orange-950/25"
             >
               <div className="flex items-start justify-between gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-500/30">
-                  <Video className="h-5 w-5" aria-hidden />
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30">
+                  <Mic className="h-5 w-5" aria-hidden />
                 </span>
-                <span className="text-xs text-cyan-300/90">VDO.Ninja</span>
+                <span className="text-xs text-orange-300/90">LiveKit</span>
               </div>
-              <h3 className="mt-3 font-semibold text-white">Production video</h3>
+              <h3 className="mt-3 font-semibold text-white">Radio comms</h3>
               <p className="mt-1 flex-1 text-sm text-slate-400">
-                Live engine + join/director links (room password applied).
+                Multi-channel PTT radio with per-user mixer and transcription.
               </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-cyan-300 group-hover:text-cyan-200">
-                Open Production video
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-orange-300 group-hover:text-orange-200">
+                Open Radio
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden />
               </span>
             </Link>
@@ -58,22 +58,15 @@ export function PublicLanding() {
         <section className="rounded-2xl border border-white/10 bg-black/20 p-6">
           <h2 className="font-semibold text-white">Sign in</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Admins manage users and configuration. Contractors submit invoices.
+            Enter your credentials to access your workspace — role and permissions are determined by your account.
           </p>
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-4">
             <Link
               href="/login?next=/"
               className="inline-flex items-center gap-2 rounded-lg bg-brand/20 px-4 py-2 text-sm font-medium text-brand/95 ring-1 ring-brand/35 hover:bg-brand/30"
             >
               <LogIn className="h-4 w-4" aria-hidden />
-              Admin sign-in
-            </Link>
-            <Link
-              href="/subcontractor/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/15 hover:bg-white/15"
-            >
-              <FileText className="h-4 w-4" aria-hidden />
-              Contractor sign-in
+              Sign in
             </Link>
           </div>
         </section>
@@ -81,4 +74,3 @@ export function PublicLanding() {
     </div>
   );
 }
-

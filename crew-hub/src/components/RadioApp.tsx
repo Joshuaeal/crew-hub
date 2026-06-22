@@ -664,6 +664,8 @@ export function RadioApp({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anyConnected = connectedRooms.size > 0;
+  // Guests must enter a name before joining anything
+  const nameRequired = !username && !speakerName.trim();
 
   const isMobile = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -708,7 +710,11 @@ export function RadioApp({
           placeholder={username ?? "Enter your display name"}
           className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-brand/40"
         />
-        <p className="mt-1 text-[10px] text-slate-600">Used as your identity on all channels and in the transcript.</p>
+        <p className="mt-1 text-[10px] text-slate-600">
+          {nameRequired
+            ? "Enter a name to join channels. Use your Crew Hub username to unlock latching mic mode."
+            : "Used as your identity on all channels and in the transcript."}
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-[1fr_300px]">
@@ -775,7 +781,7 @@ export function RadioApp({
                   <button
                     type="button"
                     onClick={() => { if (isConnected) void disconnectRoom(ch.room); else void connectRoom(ch); }}
-                    disabled={isConnecting}
+                    disabled={isConnecting || (!isConnected && nameRequired)}
                     className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
                       isConnected
                         ? "bg-red-500/20 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/30"

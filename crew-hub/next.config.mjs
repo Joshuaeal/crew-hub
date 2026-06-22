@@ -29,13 +29,22 @@ const nextConfig = {
   },
   async rewrites() {
     const upstream = process.env.MATRIX_UPSTREAM_URL?.trim();
-    if (!upstream) return [];
-    const base = upstream.replace(/\/$/, "");
-    return [
-      { source: "/_matrix/:path*", destination: `${base}/_matrix/:path*` },
-      { source: "/_synapse/:path*", destination: `${base}/_synapse/:path*` },
-      { source: "/.well-known/matrix/:path*", destination: `${base}/.well-known/matrix/:path*` },
-    ];
+    const elementUpstream = process.env.ELEMENT_UPSTREAM_URL?.trim();
+    const rules = [];
+    if (upstream) {
+      const base = upstream.replace(/\/$/, "");
+      rules.push(
+        { source: "/_matrix/:path*", destination: `${base}/_matrix/:path*` },
+        { source: "/_synapse/:path*", destination: `${base}/_synapse/:path*` },
+        { source: "/.well-known/matrix/:path*", destination: `${base}/.well-known/matrix/:path*` },
+      );
+    }
+    if (elementUpstream) {
+      const ebase = elementUpstream.replace(/\/$/, "");
+      // Next.js app routes (e.g. /element/config.json) take priority over rewrites
+      rules.push({ source: "/element/:path*", destination: `${ebase}/:path*` });
+    }
+    return rules;
   },
 };
 

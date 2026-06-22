@@ -13,6 +13,11 @@ export const GRANULAR_PERMISSIONS = [
   "users_manage",
   "hr",
   "hr_manage",
+  "projects_view",
+  "projects_manage",
+  "socials_view",
+  "socials_manage",
+  "affine_workspace",
 ] as const;
 
 export type GranularPermission = (typeof GRANULAR_PERMISSIONS)[number];
@@ -31,6 +36,11 @@ export const PERMISSION_LABELS: Record<GranularPermission, string> = {
   users_manage: "Manage users & permissions",
   hr: "HR workspace (directory, submit leave)",
   hr_manage: "HR — approve or reject leave requests",
+  projects_view: "Projects (view)",
+  projects_manage: "Projects (create, edit, files, talent, pricing)",
+  socials_view: "Socials (view)",
+  socials_manage: "Socials (log, edit, delete posts)",
+  affine_workspace: "Workspace (AFFiNE boards)",
 };
 
 export function isGranularPermission(v: string): v is GranularPermission {
@@ -71,6 +81,24 @@ export function canManageHrLeave(permissions: string[]): boolean {
   return hasPermission(permissions, "hr_manage") || hasPermission(permissions, "users_manage");
 }
 
+export function canAccessProjects(permissions: string[]): boolean {
+  return (
+    hasPermission(permissions, "projects_view") ||
+    hasPermission(permissions, "projects_manage")
+  );
+}
+
+export function canAccessSocials(permissions: string[]): boolean {
+  return (
+    hasPermission(permissions, "socials_view") ||
+    hasPermission(permissions, "socials_manage")
+  );
+}
+
+export function canAccessAffine(permissions: string[]): boolean {
+  return hasPermission(permissions, "affine_workspace");
+}
+
 /** Defaults when creating a user by role (before admin edits). */
 export function defaultPermissionsForRole(
   role: "admin" | "member" | "subcontractor"
@@ -84,6 +112,7 @@ export function defaultPermissionsForRole(
     "inventory_request",
     "hr",
     "comms",
+    "affine_workspace",
   ];
 }
 

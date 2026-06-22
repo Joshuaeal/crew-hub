@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AccessToken } from "livekit-server-sdk";
 import { getSession } from "@/lib/session";
-import { readUsers } from "@/lib/users-store";
 import { readInstanceSettings } from "@/lib/instance-settings-store";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +12,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Use session identity if signed in, otherwise fall back to the provided name or a guest label
-  const [session, settings, users] = await Promise.all([
+  const [session, settings] = await Promise.all([
     getSession(),
     readInstanceSettings().catch(() => null),
-    readUsers().catch(() => [] as Awaited<ReturnType<typeof readUsers>>),
   ]);
   const apiKey = process.env.LIVEKIT_API_KEY ?? "devkey";
   const apiSecret = process.env.LIVEKIT_API_SECRET ?? "secret";
@@ -26,13 +24,12 @@ export async function POST(req: NextRequest) {
     session?.email ||
     `guest-${Math.random().toString(36).slice(2, 7)}`;
 
-  // Latching is available when the admin has enabled it AND the identity matches a known username
+  // Latching is available when the admin has enabled it AND the participant has a named identity
+  // (logged-in session, or any manually entered display name). Auto-generated guest-XXXXX
+  // identities (no name provided at all) stay PTT-only.
   const latchingGloballyEnabled = settings?.radioLatchingEnabled === true;
-  const identityLower = participantIdentity.toLowerCase().trim();
-  const nameMatchesUser =
-    !!session?.username || // logged-in users always qualify
-    users.some((u) => u.username.toLowerCase() === identityLower);
-  const latchingAvailable = latchingGloballyEnabled && nameMatchesUser;
+  const hasNamedIdentity = !!session?.username || !!(identity?.trim());
+  const latchingAvailable = latchingGloballyEnabled && hasNamedIdentity;
 
   const at = new AccessToken(apiKey, apiSecret, {
     identity: participantIdentity,

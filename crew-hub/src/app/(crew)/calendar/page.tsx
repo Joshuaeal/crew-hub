@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { CalendarScheduleClient } from "@/components/CalendarScheduleClient";
 import { readCalendarEvents } from "@/lib/calendar-events-store";
+import { readProjects } from "@/lib/projects-store";
 
 export const dynamic = "force-dynamic";
 
@@ -18,14 +19,26 @@ function buildIcalUrl(path: string): string | null {
 }
 
 export default async function CalendarPage() {
-  const items = await readCalendarEvents();
+  const [items, allProjects] = await Promise.all([readCalendarEvents(), readProjects()]);
   const combinedFeedUrl = buildIcalUrl("combined");
   const scheduleFeedUrl = buildIcalUrl("calendar");
   const shiftsFeedUrl = buildIcalUrl("shifts");
 
+  const projects = allProjects
+    .filter((p) => p.status !== "Cancelled" && (p.startDate || p.endDate))
+    .map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      status: p.status,
+      startDate: p.startDate,
+      endDate: p.endDate,
+    }));
+
   return (
     <CalendarScheduleClient
       initialItems={items}
+      projects={projects}
       combinedFeedUrl={combinedFeedUrl}
       scheduleFeedUrl={scheduleFeedUrl}
       shiftsFeedUrl={shiftsFeedUrl}

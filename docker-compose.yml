@@ -81,6 +81,69 @@ services:
       - "50100-50200:50100-50200/udp"
     restart: unless-stopped
 
+  # ── AFFiNE self-hosted workspace ──────────────────────────────────────────────
+  # Pull the official AFFiNE docker-compose definition from:
+  #   https://github.com/toeverything/AFFiNE/blob/canary/.github/deployment/self-host/docker-compose.yml
+  # then adapted to match this stack's conventions.
+  #
+  # To enable: uncomment the three services below, then in Admin → Instance Settings
+  # set the AFFiNE URL to http://127.0.0.1:3010 (local) or your public subdomain.
+  #
+  # Also set in .env:
+  #   AFFINE_ADMIN_EMAIL=<your-admin-email>
+  #   AFFINE_ADMIN_PASSWORD=<strong-password>
+  #   AFFINE_BRIDGE_SECRET=<openssl rand -hex 16>
+  #
+  # affine:
+  #   image: ghcr.io/toeverything/affine-graphql:stable
+  #   depends_on:
+  #     affine-postgres:
+  #       condition: service_healthy
+  #     affine-redis:
+  #       condition: service_started
+  #   ports:
+  #     - "${AFFINE_PORT:-3010}:3010"
+  #   environment:
+  #     NODE_OPTIONS: "--import=./scripts/register.cjs"
+  #     AFFINE_CONFIG_PATH: /root/.affine/config
+  #     REDIS_SERVER_HOST: affine-redis
+  #     DATABASE_URL: "postgresql://affine:${AFFINE_DB_PASSWORD:-affine_dev}@affine-postgres:5432/affine"
+  #     NODE_ENV: production
+  #     AFFINE_ADMIN_EMAIL: ${AFFINE_ADMIN_EMAIL:-}
+  #     AFFINE_ADMIN_PASSWORD: ${AFFINE_ADMIN_PASSWORD:-}
+  #     # IMPORTANT: set this before first run — changing later is disruptive
+  #     AFFINE_SERVER_EXTERNAL_URL: ${AFFINE_EXTERNAL_URL:-http://127.0.0.1:3010}
+  #   volumes:
+  #     - affine_config:/root/.affine/config
+  #     - affine_blobs:/root/.affine/storage
+  #   restart: unless-stopped
+  #
+  # affine-postgres:
+  #   image: postgres:16
+  #   environment:
+  #     POSTGRES_USER: affine
+  #     POSTGRES_PASSWORD: ${AFFINE_DB_PASSWORD:-affine_dev}
+  #     POSTGRES_DB: affine
+  #     PGDATA: /var/lib/postgresql/data/pgdata
+  #   volumes:
+  #     - affine_pg_data:/var/lib/postgresql/data/pgdata
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U affine"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+  #
+  # affine-redis:
+  #   image: redis:7
+  #   volumes:
+  #     - affine_redis_data:/data
+  #   restart: unless-stopped
+
 volumes:
   crew_hub_data:
   synapse-data:
+  # affine_config:
+  # affine_blobs:
+  # affine_pg_data:
+  # affine_redis_data:

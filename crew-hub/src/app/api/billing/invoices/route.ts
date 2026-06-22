@@ -42,6 +42,8 @@ export async function POST(request: Request) {
     status?: string;
     followUpEnabled?: boolean;
     followUpIntervalDays?: number[];
+    usePackages?: boolean;
+    packages?: unknown;
   };
   try {
     body = await request.json();
@@ -89,6 +91,8 @@ export async function POST(request: Request) {
     followUpEnabled: typeof body.followUpEnabled === "boolean" ? body.followUpEnabled : undefined,
     followUpIntervalDays,
     createdByEmail: gate.session.email,
+    usePackages: typeof body.usePackages === "boolean" ? body.usePackages : undefined,
+    packages: body.packages,
   });
 
   return NextResponse.json({ item: row });

@@ -113,6 +113,7 @@ export async function updateProject(
     startDate: string | undefined;
     endDate: string | undefined;
     clientId: string | undefined;
+    affineDocUrl: string | undefined;
   }>
 ): Promise<Project | null> {
   const all = await readProjects();
@@ -129,6 +130,7 @@ export async function updateProject(
     ...("startDate" in patch ? { startDate: patch.startDate || undefined } : {}),
     ...("endDate" in patch ? { endDate: patch.endDate || undefined } : {}),
     ...("clientId" in patch ? { clientId: patch.clientId || undefined } : {}),
+    ...("affineDocUrl" in patch ? { affineDocUrl: patch.affineDocUrl || undefined } : {}),
     updatedAt: now,
   };
   await writeAll(all);
@@ -155,6 +157,7 @@ export async function addTalent(
     rate?: number;
     rateUnit?: "hourly" | "daily";
     confirmed?: boolean;
+    isOpen?: boolean;
   }
 ): Promise<Project | null> {
   const all = await readProjects();
@@ -169,6 +172,9 @@ export async function addTalent(
     rate: typeof input.rate === "number" ? input.rate : undefined,
     rateUnit: input.rateUnit === "hourly" || input.rateUnit === "daily" ? input.rateUnit : undefined,
     confirmed: input.confirmed ?? false,
+    // Auto-request internal crew members when personId is provided
+    requestStatus: input.personId ? "pending" : undefined,
+    isOpen: input.isOpen || undefined,
   };
   all[i] = { ...all[i], talent: [...all[i].talent, entry], updatedAt: new Date().toISOString() };
   await writeAll(all);
@@ -186,6 +192,8 @@ export async function updateTalent(
     rate: number | undefined;
     rateUnit: "hourly" | "daily" | undefined;
     confirmed: boolean;
+    requestStatus: "pending" | "accepted" | "declined" | undefined;
+    isOpen: boolean | undefined;
   }>
 ): Promise<Project | null> {
   const all = await readProjects();
@@ -205,12 +213,35 @@ export async function updateTalent(
     ...("rate" in patch ? { rate: typeof patch.rate === "number" ? patch.rate : undefined } : {}),
     ...("rateUnit" in patch ? { rateUnit: patch.rateUnit === "hourly" || patch.rateUnit === "daily" ? patch.rateUnit : undefined } : {}),
     ...(patch.confirmed !== undefined ? { confirmed: patch.confirmed } : {}),
+    ...("requestStatus" in patch ? { requestStatus: patch.requestStatus } : {}),
+    ...("isOpen" in patch ? { isOpen: patch.isOpen || undefined } : {}),
   };
   const newTalent = [...all[i].talent];
   newTalent[ti] = next;
   all[i] = { ...all[i], talent: newTalent, updatedAt: new Date().toISOString() };
   await writeAll(all);
   return all[i];
+}
+
+/** Claim an open slot — sets personId to claimer and marks requestStatus pending for admin approval */
+export async function claimOpenTalentSlot(
+  slug: string,
+  talentId: string,
+  userId: string
+): Promise<{ project: Project | null; error?: string }> {
+  const all = await readProjects();
+  const i = all.findIndex((p) => p.slug === slug);
+  if (i < 0) return { project: null, error: "Not found" };
+  const ti = all[i].talent.findIndex((t) => t.id === talentId);
+  if (ti < 0) return { project: null, error: "Not found" };
+  const cur = all[i].talent[ti];
+  if (!cur.isOpen) return { project: null, error: "Slot is not open for claims" };
+  if (cur.personId) return { project: null, error: "Slot already claimed" };
+  const newTalent = [...all[i].talent];
+  newTalent[ti] = { ...cur, personId: userId, isOpen: undefined, requestStatus: "pending" };
+  all[i] = { ...all[i], talent: newTalent, updatedAt: new Date().toISOString() };
+  await writeAll(all);
+  return { project: all[i] };
 }
 
 export async function deleteTalent(slug: string, talentId: string): Promise<Project | null> {

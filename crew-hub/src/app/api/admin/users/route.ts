@@ -6,6 +6,8 @@ import type { CrewRole } from "@/types/crew-role";
 import { isCrewRole } from "@/types/crew-role";
 import { normalizePermissionList } from "@/types/permissions";
 import { getMatrixUpstreamUrl } from "@/lib/service-urls";
+import { provisionAffineUser } from "@/lib/affine-bridge";
+import { readInstanceSettings } from "@/lib/instance-settings-store";
 
 function publicUser(u: Awaited<ReturnType<typeof readUsers>>[number]) {
   return {
@@ -120,6 +122,18 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // Fire-and-forget: provision AFFiNE account with same password
+    readInstanceSettings().then((settings) => {
+      if (settings.affineUrl) {
+        provisionAffineUser(
+          settings.affineUrl,
+          email,
+          typeof body.displayName === "string" ? body.displayName : username,
+          password
+        ).catch(() => {});
+      }
+    }).catch(() => {});
 
     return NextResponse.json({ user: publicUser(user) });
   } catch (e) {
