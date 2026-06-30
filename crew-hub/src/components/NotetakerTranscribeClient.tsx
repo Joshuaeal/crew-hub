@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Mic, MicOff, Save, Trash2 } from "lucide-react";
+import { Loader2, Mic, MicOff, Save, Sparkles, Trash2 } from "lucide-react";
 
 type Segment = {
   id: string;
@@ -22,6 +22,10 @@ export function NotetakerTranscribeClient() {
   const [audioError, setAudioError] = useState<string | null>(null);
   const [speakerLabel, setSpeakerLabel] = useState("");
   const [chunkSecs, setChunkSecs] = useState(8);
+
+  const [summarising, setSummarising] = useState(false);
+  const [summariseError, setSummariseError] = useState<string | null>(null);
+  const [structuredContent, setStructuredContent] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -125,6 +129,29 @@ export function NotetakerTranscribeClient() {
     .map((s) => `[${new Date(s.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}] ${s.text}`)
     .join("\n");
 
+  async function handleSummarise() {
+    if (!fullTranscript.trim()) return;
+    setSummariseError(null);
+    setSummarising(true);
+    try {
+      const res = await fetch("/api/notetaker/summarise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: fullTranscript }),
+      });
+      const j = (await res.json()) as { structured_content?: string; error?: string };
+      if (!res.ok) {
+        setSummariseError(j.error ?? "Summarisation failed.");
+        return;
+      }
+      setStructuredContent(j.structured_content ?? "");
+    } catch {
+      setSummariseError("Network error — could not reach omlx.");
+    } finally {
+      setSummarising(false);
+    }
+  }
+
   async function handleSave() {
     if (!fullTranscript.trim()) return;
     setSaveError(null);
@@ -140,7 +167,7 @@ export function NotetakerTranscribeClient() {
         body: JSON.stringify({
           title: noteTitle,
           transcript: fullTranscript,
-          structured_content: fullTranscript,
+          structured_content: structuredContent || fullTranscript,
         }),
       });
       if (!res.ok) {
@@ -269,22 +296,35 @@ export function NotetakerTranscribeClient() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
+              {summariseError && <p className="text-xs text-red-400">{summariseError}</p>}
+              <button
+                type="button"
+                onClick={() => void handleSummarise()}
+                disabled={summarising || saving}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-brand/30 bg-brand/10 py-2 text-sm font-medium text-brand/90 hover:bg-brand/20 disabled:opacity-50 transition"
+              >
+                {summarising ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <><Sparkles className="h-4 w-4" aria-hidden />Summarise with omlx</>
+                )}
+              </button>
               {saveError && <p className="text-xs text-red-400">{saveError}</p>}
               <button
                 type="button"
                 onClick={() => void handleSave()}
-                disabled={saving}
+                disabled={saving || summarising}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand/90 py-2 text-sm font-semibold text-slate-950 hover:bg-brand disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                 ) : (
-                  <><Save className="h-4 w-4" aria-hidden />Save to library</>
+                  <><Save className="h-4 w-4" aria-hidden />{structuredContent ? "Save to library" : "Save raw transcript"}</>
                 )}
               </button>
               <button
                 type="button"
-                onClick={() => setSegments([])}
+                onClick={() => { setSegments([]); setStructuredContent(""); }}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 py-1.5 text-xs text-slate-500 hover:text-red-400 transition"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
@@ -294,34 +334,56 @@ export function NotetakerTranscribeClient() {
           )}
         </div>
 
-        {/* Right: transcript */}
-        <div className="min-w-0 flex-1">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Transcript
-          </p>
-          {segments.length === 0 ? (
-            <div className="flex h-40 items-center justify-center rounded-xl border border-white/10 bg-black/10 text-sm text-slate-600">
-              {recording ? "Listening…" : "Transcripts will appear here when recording starts."}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {segments.map((seg) => (
-                <div
-                  key={seg.id}
-                  className={`rounded-lg px-3 py-2 text-sm ${
-                    seg.error
-                      ? "border border-red-500/30 bg-red-500/10 text-red-200"
-                      : "bg-white/5 text-slate-200"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="whitespace-pre-wrap">{seg.text}</p>
-                    <span className="shrink-0 text-[10px] text-slate-600">
-                      {new Date(seg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                    </span>
+        {/* Right: transcript + summary */}
+        <div className="min-w-0 flex-1 space-y-4">
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Transcript
+            </p>
+            {segments.length === 0 ? (
+              <div className="flex h-40 items-center justify-center rounded-xl border border-white/10 bg-black/10 text-sm text-slate-600">
+                {recording ? "Listening…" : "Transcripts will appear here when recording starts."}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {segments.map((seg) => (
+                  <div
+                    key={seg.id}
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      seg.error
+                        ? "border border-red-500/30 bg-red-500/10 text-red-200"
+                        : "bg-white/5 text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="whitespace-pre-wrap">{seg.text}</p>
+                      <span className="shrink-0 text-[10px] text-slate-600">
+                        {new Date(seg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </span>
+                    </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {(structuredContent || summarising) && (
+            <div>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Structured Notes
+              </p>
+              {summarising ? (
+                <div className="flex h-24 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/10 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Summarising…
                 </div>
-              ))}
+              ) : (
+                <textarea
+                  className="w-full rounded-xl border border-brand/20 bg-black/30 px-4 py-3 font-mono text-sm text-slate-200 outline-none focus:ring-1 focus:ring-brand/40 resize-y min-h-[16rem]"
+                  value={structuredContent}
+                  onChange={(e) => setStructuredContent(e.target.value)}
+                />
+              )}
             </div>
           )}
         </div>
