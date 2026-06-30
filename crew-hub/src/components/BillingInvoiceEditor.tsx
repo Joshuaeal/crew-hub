@@ -702,12 +702,13 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
   }
 
   function downloadPdf() {
-    if (!workspaceSettings) return;
+    if (!workspaceSettings || !initial) return;
     const html = billingDocumentFullHtml(previewDoc, workspaceSettings, "", instanceSettings ?? undefined);
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
     win.document.close();
+    win.document.title = initial.number;
     win.focus();
     setTimeout(() => { win.print(); }, 400);
   }
