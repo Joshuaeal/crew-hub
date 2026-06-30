@@ -157,6 +157,7 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
         } catch { /* fall through */ }
         return undefined;
       })(),
+      omlxUrl: isHttpUrl(o.omlxUrl) ? (o.omlxUrl as string).trim() : undefined,
       radioLatchingEnabled: o.radioLatchingEnabled === true ? true : undefined,
       radioChannels: (() => {
         if (!Array.isArray(o.radioChannels)) return undefined;

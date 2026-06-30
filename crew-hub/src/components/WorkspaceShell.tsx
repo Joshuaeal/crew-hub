@@ -259,6 +259,7 @@ export function WorkspaceShell({
     if (signedIn && !isSubcontractor && pathname.startsWith("/notetaker")) {
       links.push(
         { href: "/notetaker", label: "Notetaker", icon: BookOpen, active: pathname === "/notetaker", visible: showNotetaker },
+        { href: "/notetaker/transcribe", label: "Transcribe", icon: Mic, active: on("/notetaker/transcribe"), visible: showNotetaker },
         { href: "/notetaker/library", label: "Library", icon: BookOpen, active: on("/notetaker/library"), visible: showNotetaker },
       );
     }

@@ -45,15 +45,15 @@ export default async function NotetakerPage() {
 
           <li>
             <Link
-              href="/comms/transcribe"
+              href="/notetaker/transcribe"
               className="flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-brand/30 hover:bg-white/[0.06]"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand/70 ring-1 ring-brand/25">
                 <Mic className="h-5 w-5" aria-hidden />
               </span>
-              <h2 className="mt-4 font-semibold text-white">Live Transcription</h2>
+              <h2 className="mt-4 font-semibold text-white">Transcribe</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Transcribe audio in real time and post segments to a Matrix channel.
+                Record audio, transcribe via Whisper, and save the result to your notes library.
               </p>
             </Link>
           </li>

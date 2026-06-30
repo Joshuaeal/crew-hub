@@ -103,6 +103,11 @@ export type InstanceSettings = {
    * Example: ws://localhost:7880 or wss://livekit.yourdomain.com
    */
   livekitUrl?: string;
+  /**
+   * Base URL of the omlx machine's LLM API (e.g. http://100.x.x.x:11434) used to generate
+   * structured meeting note summaries from raw transcripts.
+   */
+  omlxUrl?: string;
   /** Radio channel names shown in the comms radio page (comma-separated label:roomName pairs or just labels). */
   radioChannels?: string[];
   /**

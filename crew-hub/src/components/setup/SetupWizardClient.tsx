@@ -38,6 +38,7 @@ type InstanceSettings = {
   enabledModules?: ModuleId[];
   setupComplete?: boolean;
   livekitUrl?: string;
+  omlxUrl?: string;
   radioChannels?: string[];
   radioLatchingEnabled?: boolean;
   affineUrl?: string;
@@ -94,6 +95,7 @@ export function SetupWizardClient() {
   const [vdoRoomPassword, setVdoRoomPassword] = useState("");
   const [vdoRoomPrefix, setVdoRoomPrefix] = useState("");
   const [livekitUrl, setLivekitUrl] = useState("");
+  const [omlxUrl, setOmlxUrl] = useState("");
   const [affineUrl, setAffineUrl] = useState("");
   const [radioChannels, setRadioChannels] = useState("");
   const [radioLatchingEnabled, setRadioLatchingEnabled] = useState(false);
@@ -138,6 +140,7 @@ export function SetupWizardClient() {
           setVdoRoomPassword(inst.vdoRoomPassword || "");
           setVdoRoomPrefix(inst.vdoRoomPrefix || "");
           setLivekitUrl(inst.livekitUrl || "");
+          setOmlxUrl(inst.omlxUrl || "");
           setAffineUrl(inst.affineUrl || "");
           setRadioChannels((inst.radioChannels || []).join(", "));
           setRadioLatchingEnabled(inst.radioLatchingEnabled ?? false);
@@ -207,6 +210,7 @@ export function SetupWizardClient() {
             vdoRoomPassword,
             vdoRoomPrefix,
             livekitUrl,
+            omlxUrl,
             affineUrl,
             radioChannels: radioChannels.trim()
               ? radioChannels.split(",").map((s) => s.trim()).filter(Boolean)
@@ -676,6 +680,22 @@ export function SetupWizardClient() {
                   />
                   <p className="mt-1 text-xs text-slate-600">
                     WebSocket URL of your LiveKit server. Use <code className="rounded bg-black/30 px-1">ws://</code> for LAN or <code className="rounded bg-black/30 px-1">wss://</code> for a tunnelled URL. Leave blank to default to <code className="rounded bg-black/30 px-1">ws://localhost:7880</code>.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    omlx LLM URL (meeting note summaries)
+                  </label>
+                  <input
+                    type="url"
+                    value={omlxUrl}
+                    onChange={(e) => setOmlxUrl(e.target.value)}
+                    placeholder="http://100.x.x.x:11434"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-xs text-slate-600">
+                    Base URL of the omlx machine&apos;s LLM API (Ollama or compatible). Used to generate structured summaries from meeting transcripts in the Notetaker. Use the Tailscale IP if accessing remotely.
                   </p>
                 </div>
 
