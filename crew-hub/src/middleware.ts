@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 import { COOKIE_NAME } from "@/lib/session";
 import {
   canAccessHr,
+  canAccessNotetaker,
   canAccessSchedule,
   canAccessShiftsList,
   hasPermission,
@@ -125,6 +126,10 @@ function isSetupPath(pathname: string) {
   return pathname === "/setup" || pathname.startsWith("/setup/");
 }
 
+function isNotetakerPath(pathname: string) {
+  return pathname === "/notetaker" || pathname.startsWith("/notetaker/");
+}
+
 function isProtectedPath(pathname: string) {
   return (
     isSubcontractorInvoicePath(pathname) ||
@@ -139,7 +144,8 @@ function isProtectedPath(pathname: string) {
     isAdminHubPath(pathname) ||
     isHrPath(pathname) ||
     isSetupPath(pathname) ||
-    isCommsVdoPath(pathname)
+    isCommsVdoPath(pathname) ||
+    isNotetakerPath(pathname)
   );
 }
 
@@ -296,6 +302,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
+    if (isNotetakerPath(pathname)) {
+      if (!canAccessNotetaker(perms)) {
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+      return NextResponse.next();
+    }
+
     return NextResponse.next();
   } catch {
     return loginRedirect(request, pathname);
@@ -332,5 +345,7 @@ export const config = {
     "/admin/members/:path*",
     "/hr",
     "/hr/:path*",
+    "/notetaker",
+    "/notetaker/:path*",
   ],
 };

@@ -48,12 +48,14 @@ function WidgetContent({ widget, session, affineUrl }: { widget: WidgetInstance;
           isAdmin={isAdmin}
           canViewInventory={canViewInventory}
           canViewProjects={canViewProjects}
+          filterUserId={session.role === "subcontractor" ? session.userId : undefined}
         />
       );
     case "recent_jobs":
       return (
         <RecentJobsWidget
           settings={widget.settings as Parameters<typeof RecentJobsWidget>[0]["settings"]}
+          filterUserId={session.role === "subcontractor" ? session.userId : undefined}
         />
       );
     case "my_shifts":

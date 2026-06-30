@@ -6,6 +6,8 @@ import type { Project } from "@/types/projects";
 
 type Props = {
   settings: RecentJobsSettings;
+  /** When set, only show jobs where this user is in the talent list */
+  filterUserId?: string;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -16,7 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
   Cancelled: "bg-red-100 text-red-600",
 };
 
-export function RecentJobsWidget({ settings }: Props) {
+export function RecentJobsWidget({ settings, filterUserId }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +28,10 @@ export function RecentJobsWidget({ settings }: Props) {
       .then((r) => r.json())
       .then(({ projects: all }: { projects: Project[] }) => {
         if (cancelled) return;
-        const sorted = [...all].sort(
+        const filtered = filterUserId
+          ? all.filter((p) => p.talent?.some((t) => t.personId === filterUserId))
+          : all;
+        const sorted = [...filtered].sort(
           (a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime(),
         );
         setProjects(sorted.slice(0, settings.count));

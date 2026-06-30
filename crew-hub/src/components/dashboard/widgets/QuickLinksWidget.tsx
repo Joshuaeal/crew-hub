@@ -10,6 +10,7 @@ import {
   BarChart2,
   Package,
   MessageSquare,
+  LayoutGrid,
 } from "lucide-react";
 
 const LINKS = [
@@ -21,6 +22,7 @@ const LINKS = [
   { label: "Inventory", desc: "Gear, requests and jobs.", href: "/inventory", icon: Package },
   { label: "Channels", desc: "Matrix messaging.", href: "/comms", icon: MessageSquare },
   { label: "Billing", desc: "Invoices and payables.", href: "/billing", icon: FileText },
+  { label: "Boards", desc: "AFFiNE collaborative workspace.", href: "/boards", icon: LayoutGrid },
 ];
 
 export function QuickLinksWidget() {

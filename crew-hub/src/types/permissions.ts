@@ -18,6 +18,7 @@ export const GRANULAR_PERMISSIONS = [
   "socials_view",
   "socials_manage",
   "affine_workspace",
+  "notetaker",
 ] as const;
 
 export type GranularPermission = (typeof GRANULAR_PERMISSIONS)[number];
@@ -41,6 +42,7 @@ export const PERMISSION_LABELS: Record<GranularPermission, string> = {
   socials_view: "Socials (view)",
   socials_manage: "Socials (log, edit, delete posts)",
   affine_workspace: "Workspace (AFFiNE boards)",
+  notetaker: "Meeting Notes (save, browse, share notes)",
 };
 
 export function isGranularPermission(v: string): v is GranularPermission {
@@ -99,6 +101,10 @@ export function canAccessAffine(permissions: string[]): boolean {
   return hasPermission(permissions, "affine_workspace");
 }
 
+export function canAccessNotetaker(permissions: string[]): boolean {
+  return hasPermission(permissions, "notetaker");
+}
+
 /** Defaults when creating a user by role (before admin edits). */
 export function defaultPermissionsForRole(
   role: "admin" | "member" | "subcontractor"
@@ -113,6 +119,7 @@ export function defaultPermissionsForRole(
     "hr",
     "comms",
     "affine_workspace",
+    "notetaker",
   ];
 }
 

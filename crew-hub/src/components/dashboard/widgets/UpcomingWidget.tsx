@@ -49,9 +49,11 @@ type Props = {
   isAdmin: boolean;
   canViewInventory: boolean;
   canViewProjects: boolean;
+  /** When set, milestones are filtered to projects where this user is in talent */
+  filterUserId?: string;
 };
 
-export function UpcomingWidget({ settings, userEmail, isAdmin, canViewInventory, canViewProjects }: Props) {
+export function UpcomingWidget({ settings, userEmail, isAdmin, canViewInventory, canViewProjects, filterUserId }: Props) {
   const [items, setItems] = useState<UpcomingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function UpcomingWidget({ settings, userEmail, isAdmin, canViewInventory,
             const today = new Date().toISOString().slice(0, 10);
             for (const p of projects) {
               if (p.status === "Cancelled" || p.status === "Complete") continue;
+              if (filterUserId && !p.talent?.some((t) => t.personId === filterUserId)) continue;
               for (const m of p.milestones ?? []) {
                 if (m.status === "Done") continue;
                 const mDate = new Date(m.dueDate).getTime();
@@ -154,7 +157,7 @@ export function UpcomingWidget({ settings, userEmail, isAdmin, canViewInventory,
 
     void load();
     return () => { cancelled = true; };
-  }, [settings.lookahead, userEmail, isAdmin, canViewInventory, canViewProjects]);
+  }, [settings.lookahead, userEmail, isAdmin, canViewInventory, canViewProjects, filterUserId]);
 
   const windowLabel = LOOKAHEAD_OPTIONS.find((o) => o.value === settings.lookahead)?.label ?? settings.lookahead;
 
