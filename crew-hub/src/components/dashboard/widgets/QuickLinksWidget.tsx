@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  BookOpen,
   Calendar,
   Briefcase,
   Users,
@@ -23,6 +24,7 @@ const LINKS = [
   { label: "Channels", desc: "Matrix messaging.", href: "/comms", icon: MessageSquare },
   { label: "Billing", desc: "Invoices and payables.", href: "/billing", icon: FileText },
   { label: "Boards", desc: "AFFiNE collaborative workspace.", href: "/boards", icon: LayoutGrid },
+  { label: "Notetaker", desc: "Meeting notes library.", href: "/notetaker", icon: BookOpen },
 ];
 
 export function QuickLinksWidget() {

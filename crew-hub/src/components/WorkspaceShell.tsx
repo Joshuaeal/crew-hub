@@ -30,6 +30,7 @@ import {
 import {
   canAccessAffine,
   canAccessHr,
+  canAccessNotetaker,
   canAccessProjects,
   canAccessSchedule,
   canAccessShiftsList,
@@ -186,6 +187,7 @@ export function WorkspaceShell({
   const showProjects = signedIn && modEnabled(enabledModules, "projects") && canAccessProjects(perms);
   const showSocials = signedIn && modEnabled(enabledModules, "socials") && canAccessSocials(perms);
   const showAffine = signedIn && modEnabled(enabledModules, "affine") && canAccessAffine(perms);
+  const showNotetaker = signedIn && canAccessNotetaker(perms);
   const showAdminTools =
     signedIn && (can(perms, "shifts_manage") || can(perms, "users_manage"));
 
@@ -251,6 +253,13 @@ export function WorkspaceShell({
       links.push(
         { href: "/shifts", label: "Shift list", icon: ClipboardList, active: on("/shifts") && !pathname.startsWith("/shifts/manage"), visible: canAccessShiftsList(perms) },
         { href: "/shifts/manage", label: "Manage", icon: Shield, active: on("/shifts/manage"), visible: can(perms, "shifts_manage") },
+      );
+    }
+
+    if (signedIn && !isSubcontractor && pathname.startsWith("/notetaker")) {
+      links.push(
+        { href: "/notetaker", label: "Notetaker", icon: BookOpen, active: pathname === "/notetaker", visible: showNotetaker },
+        { href: "/notetaker/library", label: "Library", icon: BookOpen, active: on("/notetaker/library"), visible: showNotetaker },
       );
     }
 
@@ -433,7 +442,7 @@ export function WorkspaceShell({
 
         {/* ── Native (team) ── */}
         {signedIn && !isSubcontractor &&
-          (showComms || showVdoNinja || showBilling || showContractors || showInventory || showHr || showProjects || showSocials) && (
+          (showComms || showVdoNinja || showBilling || showContractors || showInventory || showHr || showProjects || showSocials || showNotetaker) && (
           <>
             <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Native (team)
@@ -535,6 +544,15 @@ export function WorkspaceShell({
                   label="Workspace"
                   icon={PenSquare}
                   active={isActive("/workspace")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showNotetaker && (
+                <NavLink
+                  href="/notetaker"
+                  label="Notetaker"
+                  icon={BookOpen}
+                  active={isActive("/notetaker")}
                   onNavigate={() => setMobileOpen(false)}
                 />
               )}
