@@ -33,6 +33,8 @@ export function NotetakerTranscribeClient() {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const headerChunkRef = useRef<Blob | null>(null);
+  const chunkMimeRef = useRef<string>("audio/webm");
 
   async function loadDevices() {
     try {
@@ -66,10 +68,20 @@ export function NotetakerTranscribeClient() {
 
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
+      headerChunkRef.current = null;
+      chunkMimeRef.current = mimeType;
 
       recorder.ondataavailable = (ev) => {
-        if (ev.data.size < 1000) return;
-        void processChunk(ev.data);
+        if (ev.data.size < 500) return;
+        if (!headerChunkRef.current) {
+          // First chunk contains the webm header — store it and send it alone
+          headerChunkRef.current = ev.data;
+          void processChunk(ev.data);
+        } else {
+          // Subsequent chunks need the header prepended so Whisper can decode them
+          const full = new Blob([headerChunkRef.current, ev.data], { type: chunkMimeRef.current });
+          void processChunk(full);
+        }
       };
 
       recorder.start(chunkSecs * 1000);
