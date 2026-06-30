@@ -18,8 +18,6 @@ type EnrichedAccess = MeetingNoteAccess & { username: string; displayName: strin
 type Props = {
   note: MeetingNote;
   canEdit: boolean;
-  currentUserId: string;
-  isAdmin: boolean;
   creatorName: string;
   noteAccess: EnrichedAccess[];
   allUsers: { id: string; username: string; displayName: string }[];
@@ -28,8 +26,6 @@ type Props = {
 export function MeetingNoteDetailClient({
   note,
   canEdit,
-  currentUserId: _currentUserId,
-  isAdmin: _isAdmin,
   creatorName,
   noteAccess: initialAccess,
   allUsers,

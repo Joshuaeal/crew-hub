@@ -46,8 +46,6 @@ export default async function MeetingNoteDetailPage({ params }: { params: { id: 
     <MeetingNoteDetailClient
       note={note}
       canEdit={canEdit}
-      currentUserId={session.userId}
-      isAdmin={session.role === "admin"}
       creatorName={userMap[note.created_by]?.displayName ?? userMap[note.created_by]?.username ?? note.created_by}
       noteAccess={enrichedAccess}
       allUsers={allUsersForPicker}
