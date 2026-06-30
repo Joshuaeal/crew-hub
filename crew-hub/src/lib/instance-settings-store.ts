@@ -117,6 +117,9 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
     const invoiceBase = isHexColor(paletteRaw.invoiceBase)
       ? paletteRaw.invoiceBase
       : base.palette.invoiceBase;
+    const invoiceText = isHexColor(paletteRaw.invoiceText)
+      ? paletteRaw.invoiceText
+      : base.palette.invoiceText;
     return {
       companyName: typeof o.companyName === "string" ? o.companyName : base.companyName,
       invoiceLogoDataUrl:
@@ -142,7 +145,7 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
         ? (o.invoiceNumberFormat as string).trim()
         : undefined,
       invoiceSequenceStart: parseInvoiceSequenceStart(o.invoiceSequenceStart),
-      palette: { brand, ...(accent ? { accent } : {}), ...(invoiceBase ? { invoiceBase } : {}) },
+      palette: { brand, ...(accent ? { accent } : {}), ...(invoiceBase ? { invoiceBase } : {}), ...(invoiceText ? { invoiceText } : {}) },
       skuOwnerCode: typeof o.skuOwnerCode === "string" ? o.skuOwnerCode : base.skuOwnerCode,
       livekitUrl: (() => {
         if (typeof o.livekitUrl !== "string") return undefined;
