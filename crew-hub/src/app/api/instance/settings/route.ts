@@ -84,6 +84,7 @@ export async function PATCH(request: Request) {
     radioChannels: Array.isArray(patch.radioChannels) ? (patch.radioChannels as string[]) : undefined,
     radioLatchingEnabled: typeof patch.radioLatchingEnabled === "boolean" ? patch.radioLatchingEnabled : undefined,
     affineUrl: typeof patch.affineUrl === "string" ? patch.affineUrl : undefined,
+    omlxUrl: typeof patch.omlxUrl === "string" ? patch.omlxUrl : undefined,
   });
 
   return NextResponse.json({ settings: next });
