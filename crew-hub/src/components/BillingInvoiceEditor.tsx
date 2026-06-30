@@ -26,7 +26,7 @@ import type { InventoryItem } from "@/types/inventory";
 import { billingDocumentFullHtml } from "@/lib/billing-document-html";
 import type { BillingSettings } from "@/types/billing";
 import type { InstanceSettings } from "@/types/instance";
-import { Copy, Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Copy, Download, Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react";
 
 type Props = {
   mode: "create" | "edit";
@@ -699,6 +699,17 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
     } finally {
       setPending(false);
     }
+  }
+
+  function downloadPdf() {
+    if (!workspaceSettings) return;
+    const html = billingDocumentFullHtml(previewDoc, workspaceSettings, "", instanceSettings ?? undefined);
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
   }
 
   async function sendEmail() {
@@ -1594,6 +1605,17 @@ export function BillingInvoiceEditor({ mode, initial, defaultKind = "invoice" }:
             >
               <Send className="h-4 w-4" aria-hidden />
               Send by email
+            </button>
+          )}
+          {mode === "edit" && initial && (
+            <button
+              type="button"
+              onClick={downloadPdf}
+              disabled={pending}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-500/50 bg-slate-500/15 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-500/25 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Download PDF
             </button>
           )}
           <button
