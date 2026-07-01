@@ -4,11 +4,19 @@ import { InventoryListClient } from "@/components/InventoryListClient";
 import { readInventoryItems } from "@/lib/inventory-store";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/types/permissions";
+import { readProjects } from "@/lib/projects-store";
+import { readBillingCatalog } from "@/lib/billing-catalog-store";
 
 export default async function InventoryPage() {
-  const items = await readInventoryItems();
-  const session = await getSession();
+  const [items, allProjects, catalogItems, session] = await Promise.all([
+    readInventoryItems(),
+    readProjects(),
+    readBillingCatalog(),
+    getSession(),
+  ]);
+  const projects = allProjects.map((p) => ({ id: p.id, name: p.name, slug: p.slug }));
   const perms = session?.permissions ?? [];
+
 
   const canEdit = session && (hasPermission(perms, "inventory") || hasPermission(perms, "users_manage"));
   const canRequest = session && hasPermission(perms, "inventory_request");
@@ -82,7 +90,7 @@ export default async function InventoryPage() {
             {canEdit ? " Add parts or import a CSV (admins)." : " Ask an inventory admin to add stock."}
           </p>
         ) : (
-          <InventoryListClient items={items} canEdit={Boolean(canEdit)} />
+          <InventoryListClient items={items} canEdit={Boolean(canEdit)} projects={projects} catalogItems={catalogItems} />
         )}
       </div>
     </div>

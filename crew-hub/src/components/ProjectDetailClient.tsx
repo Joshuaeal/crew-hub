@@ -11,16 +11,20 @@ import {
   Link2,
   Link2Off,
   Loader2,
+  Package,
   Paperclip,
   Pencil,
   Plus,
   Receipt,
+  Search,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import { AffineEmbed } from "@/components/AffineEmbed";
 import type { Project, ProjectFile } from "@/types/projects";
+import type { BillingCatalogItem } from "@/types/billing";
+import { catalogUnitPriceForTier } from "@/types/billing";
 import { SpreadsheetImporter } from "@/components/SpreadsheetImporter";
 import {
   PROJECT_CATEGORIES,
@@ -93,6 +97,8 @@ type Props = {
   affineUrl?: string;
   /** Collabora Online URL from instance settings — used for inline document editing. */
   collaboraUrl?: string;
+  /** Billing catalog items for the line item picker. */
+  catalogItems?: BillingCatalogItem[];
   currentUserId?: string;
 };
 
@@ -105,6 +111,7 @@ export function ProjectDetailClient({
   userList,
   affineUrl,
   collaboraUrl,
+  catalogItems = [],
   currentUserId,
 }: Props) {
   const [project, setProject] = useState<Project>(initialProject);
@@ -142,6 +149,12 @@ export function ProjectDetailClient({
   const [liDesc, setLiDesc] = useState("");
   const [liQty, setLiQty] = useState("1");
   const [liPrice, setLiPrice] = useState("0");
+
+  // Catalog picker
+  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [pickerTiers, setPickerTiers] = useState<Record<string, "low" | "mid" | "high">>({});
+  const [pickerQtys, setPickerQtys] = useState<Record<string, string>>({});
 
   // Milestone form
   const [showMilestoneForm, setShowMilestoneForm] = useState(false);
@@ -396,6 +409,33 @@ export function ProjectDetailClient({
       setShowLineForm(false);
       setLiDesc(""); setLiQty("1"); setLiPrice("0");
       flash("Line item added.");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Failed", true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addFromCatalog(item: BillingCatalogItem) {
+    const tier = pickerTiers[item.id] ?? "mid";
+    const qty = parseFloat(pickerQtys[item.id] ?? "1") || 1;
+    const price = parseFloat(catalogUnitPriceForTier(item, tier)) || 0;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/projects/${slug}/import-line-items`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: [{ description: item.name, quantity: qty, unitPrice: price, catalogItemId: item.id }],
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Failed");
+      // Refetch project to get updated line items
+      const pr = await fetch(`/api/projects/${slug}`, { credentials: "same-origin" });
+      if (pr.ok) { const pd = await pr.json(); setProject(pd.project as Project); }
+      flash(`Added ${item.name}.`);
     } catch (e) {
       flash(e instanceof Error ? e.message : "Failed", true);
     } finally {
@@ -886,6 +926,95 @@ export function ProjectDetailClient({
           </div>
         </section>
 
+        {/* Catalog picker modal */}
+        {showCatalogPicker && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm pt-16 px-4">
+            <div className="flex w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-[#0d0d10] shadow-2xl" style={{ maxHeight: "75vh" }}>
+              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
+                <h2 className="text-sm font-semibold text-white">Add from catalog / inventory</h2>
+                <button type="button" onClick={() => setShowCatalogPicker(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white">
+                  <X className="h-5 w-5" aria-hidden />
+                </button>
+              </div>
+              <div className="shrink-0 border-b border-white/10 px-5 py-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden />
+                  <input
+                    autoFocus
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    placeholder="Search by name or SKU…"
+                    className="w-full rounded-lg border border-white/10 bg-black/30 py-2 pl-9 pr-4 text-sm text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                </div>
+              </div>
+              <ul className="min-h-0 flex-1 overflow-y-auto divide-y divide-white/[0.06] px-5">
+                {catalogItems
+                  .filter((c) => {
+                    const q = catalogSearch.toLowerCase();
+                    return !q || c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q);
+                  })
+                  .map((c) => {
+                    const tier = pickerTiers[c.id] ?? "mid";
+                    const qty = pickerQtys[c.id] ?? "1";
+                    const hasLow = !!(c.unitPriceLow && c.unitPriceLow !== c.unitPriceMid);
+                    const hasHigh = !!(c.unitPriceHigh && c.unitPriceHigh !== c.unitPriceMid);
+                    const hasTiers = hasLow || hasHigh;
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-white truncate">{c.name}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {c.sku && <span className="mr-2">{c.sku}</span>}
+                            {hasTiers
+                              ? `Low $${c.unitPriceLow} · Mid $${c.unitPriceMid} · High $${c.unitPriceHigh}`
+                              : `$${c.unitPrice}`}
+                            {c.inventoryItemId && (
+                              <span className="ml-2 rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] text-violet-300">inventory</span>
+                            )}
+                          </p>
+                        </div>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={qty}
+                          onChange={(e) => setPickerQtys((p) => ({ ...p, [c.id]: e.target.value }))}
+                          className="w-16 shrink-0 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-center text-sm text-white outline-none focus:ring-1 focus:ring-brand/40"
+                          aria-label="Quantity"
+                        />
+                        {hasTiers && (
+                          <select
+                            value={tier}
+                            onChange={(e) => setPickerTiers((p) => ({ ...p, [c.id]: e.target.value as "low" | "mid" | "high" }))}
+                            className="shrink-0 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-brand/40"
+                          >
+                            <option value="low">Low</option>
+                            <option value="mid">Mid</option>
+                            <option value="high">High</option>
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void addFromCatalog(c)}
+                          className="shrink-0 rounded-lg bg-brand/15 px-3 py-1.5 text-xs font-medium text-brand/90 ring-1 ring-brand/25 hover:bg-brand/25 disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+              <div className="shrink-0 border-t border-white/10 px-5 py-3">
+                <button type="button" onClick={() => setShowCatalogPicker(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Collabora editor modal */}
         {editorModal && (
           <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm">
@@ -1203,6 +1332,16 @@ export function ProjectDetailClient({
                       <Plus className="h-4 w-4" aria-hidden />
                       {showLineForm ? "Cancel" : "Add line item"}
                     </button>
+                    {catalogItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowCatalogPicker(true); setCatalogSearch(""); }}
+                        className="inline-flex items-center gap-2 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-sm text-brand/90 hover:bg-brand/20"
+                      >
+                        <Package className="h-4 w-4" aria-hidden />
+                        From catalog
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setImportTarget("line-items")}

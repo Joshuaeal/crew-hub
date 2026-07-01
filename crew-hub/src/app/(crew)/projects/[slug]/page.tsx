@@ -7,6 +7,7 @@ import { getProjectBySlug } from "@/lib/projects-store";
 import { readBillingClients } from "@/lib/billing-clients-store";
 import { readUsers } from "@/lib/users-store";
 import { readInstanceSettings } from "@/lib/instance-settings-store";
+import { readBillingCatalog } from "@/lib/billing-catalog-store";
 import { ProjectDetailClient } from "@/components/ProjectDetailClient";
 
 type Props = { params: { slug: string } };
@@ -28,10 +29,11 @@ export default async function ProjectDetailPage({ params }: Props) {
   const project = await getProjectBySlug(params.slug);
   if (!project) notFound();
 
-  const [clients, users, settings] = await Promise.all([
+  const [clients, users, settings, catalogItems] = await Promise.all([
     readBillingClients(),
     readUsers(),
     readInstanceSettings().catch(() => null),
+    readBillingCatalog(),
   ]);
 
   const clientNames: Record<string, string> = {};
@@ -63,6 +65,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         userList={userList}
         affineUrl={settings?.affineUrl}
         collaboraUrl={settings?.collaboraUrl}
+        catalogItems={catalogItems}
         currentUserId={session.userId}
       />
     </div>
