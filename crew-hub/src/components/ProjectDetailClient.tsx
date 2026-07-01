@@ -150,11 +150,15 @@ export function ProjectDetailClient({
   const [liQty, setLiQty] = useState("1");
   const [liPrice, setLiPrice] = useState("0");
 
-  // Catalog picker
+  // Catalog picker (modal)
   const [showCatalogPicker, setShowCatalogPicker] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [pickerTiers, setPickerTiers] = useState<Record<string, "low" | "mid" | "high">>({});
   const [pickerQtys, setPickerQtys] = useState<Record<string, string>>({});
+
+  // Line item description autocomplete
+  const [liSuggestions, setLiSuggestions] = useState<BillingCatalogItem[]>([]);
+  const [liSuggestOpen, setLiSuggestOpen] = useState(false);
 
   // Milestone form
   const [showMilestoneForm, setShowMilestoneForm] = useState(false);
@@ -1369,13 +1373,59 @@ export function ProjectDetailClient({
             {showLineForm && (
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="sm:col-span-1">
+                  <div className="relative sm:col-span-1">
                     <label className="block text-xs text-slate-400">Description</label>
                     <input
                       value={liDesc}
-                      onChange={(e) => setLiDesc(e.target.value)}
+                      onChange={(e) => {
+                        const q = e.target.value;
+                        setLiDesc(q);
+                        if (q.trim().length >= 1) {
+                          const ql = q.toLowerCase();
+                          const matches = catalogItems.filter(
+                            (c) =>
+                              c.name.toLowerCase().includes(ql) ||
+                              (c.sku ?? "").toLowerCase().includes(ql)
+                          ).slice(0, 8);
+                          setLiSuggestions(matches);
+                          setLiSuggestOpen(matches.length > 0);
+                        } else {
+                          setLiSuggestOpen(false);
+                        }
+                      }}
+                      onBlur={() => setTimeout(() => setLiSuggestOpen(false), 150)}
+                      onFocus={() => {
+                        if (liDesc.trim() && liSuggestions.length > 0) setLiSuggestOpen(true);
+                      }}
+                      onKeyDown={(e) => { if (e.key === "Escape") setLiSuggestOpen(false); }}
+                      autoComplete="off"
                       className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
                     />
+                    {liSuggestOpen && liSuggestions.length > 0 && (
+                      <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border border-white/15 bg-[#0d0d10] shadow-2xl">
+                        {liSuggestions.map((c) => (
+                          <li key={c.id}>
+                            <button
+                              type="button"
+                              onMouseDown={() => {
+                                setLiDesc(c.name);
+                                setLiPrice(c.unitPriceMid ?? c.unitPrice ?? "0");
+                                setLiSuggestOpen(false);
+                              }}
+                              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-white/10"
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-white">{c.name}</span>
+                                {c.sku && <span className="text-[11px] text-slate-500">{c.sku}</span>}
+                              </span>
+                              <span className="shrink-0 text-xs text-emerald-400">
+                                ${c.unitPriceMid ?? c.unitPrice}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-slate-400">Qty</label>
