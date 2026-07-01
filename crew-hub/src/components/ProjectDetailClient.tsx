@@ -12,6 +12,7 @@ import {
   Link2Off,
   Loader2,
   Paperclip,
+  Pencil,
   Plus,
   Receipt,
   Trash2,
@@ -67,6 +68,20 @@ function isPreviewable(mimeType: string): boolean {
   return mimeType.startsWith("image/") || mimeType === "application/pdf";
 }
 
+const COLLABORA_EDITABLE = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+]);
+
+function isEditable(mimeType: string): boolean {
+  return COLLABORA_EDITABLE.has(mimeType);
+}
+
 type Props = {
   initialProject: Project;
   slug: string;
@@ -76,6 +91,8 @@ type Props = {
   userList: { id: string; email: string; displayName?: string }[];
   /** AFFiNE server URL from instance settings — used for the board embed. */
   affineUrl?: string;
+  /** Collabora Online URL from instance settings — used for inline document editing. */
+  collaboraUrl?: string;
   currentUserId?: string;
 };
 
@@ -87,6 +104,7 @@ export function ProjectDetailClient({
   clientList,
   userList,
   affineUrl,
+  collaboraUrl,
   currentUserId,
 }: Props) {
   const [project, setProject] = useState<Project>(initialProject);
@@ -96,6 +114,7 @@ export function ProjectDetailClient({
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editorModal, setEditorModal] = useState<{ url: string; filename: string } | null>(null);
 
   // Overview edit state
   const [editingOverview, setEditingOverview] = useState(false);
@@ -222,6 +241,20 @@ export function ProjectDetailClient({
       flash(e instanceof Error ? e.message : "Save failed", true);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openInCollabora(fileId: string) {
+    try {
+      const r = await fetch(`/api/projects/${slug}/files/${fileId}/wopi-token`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Could not open editor");
+      setEditorModal({ url: d.editorUrl as string, filename: d.filename as string });
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not open editor", true);
     }
   }
 
@@ -762,7 +795,7 @@ export function ProjectDetailClient({
                   ref={fileInputRef}
                   type="file"
                   className="sr-only"
-                  accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx,.xls,.xlsx,.ods,.odt"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) void uploadFile(f);
@@ -779,7 +812,7 @@ export function ProjectDetailClient({
                   Upload file
                 </button>
                 <p className="mt-2 text-xs text-slate-600">
-                  PDF, images (JPEG, PNG, WebP, HEIC), Word documents. Max 25 MB.
+                  PDF, images (JPEG, PNG, WebP, HEIC), Word (DOCX), Excel (XLSX), ODF. Max 25 MB.
                 </p>
               </div>
             )}
@@ -822,23 +855,59 @@ export function ProjectDetailClient({
                         {fmtSize(f.sizeBytes)} · {new Date(f.uploadedAt).toLocaleDateString("en-AU")}
                       </p>
                     </div>
-                    {canManage && (
-                      <button
-                        type="button"
-                        onClick={() => void deleteFile(f.id)}
-                        disabled={busy}
-                        className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-red-500/15 hover:text-red-300"
-                        aria-label="Delete file"
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                      </button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {collaboraUrl && isEditable(f.mimeType) && (
+                        <button
+                          type="button"
+                          onClick={() => void openInCollabora(f.id)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+                          aria-label="Edit in Collabora"
+                          title="Edit"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden />
+                        </button>
+                      )}
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => void deleteFile(f.id)}
+                          disabled={busy}
+                          className="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/15 hover:text-red-300"
+                          aria-label="Delete file"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </div>
         </section>
+
+        {/* Collabora editor modal */}
+        {editorModal && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm">
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#0d0d10] px-4 py-2.5">
+              <span className="truncate text-sm font-medium text-white">{editorModal.filename}</span>
+              <button
+                type="button"
+                onClick={() => setEditorModal(null)}
+                className="ml-4 shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+                aria-label="Close editor"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
+            <iframe
+              src={editorModal.url}
+              title={editorModal.filename}
+              className="min-h-0 flex-1 border-0"
+              allow="clipboard-read; clipboard-write; fullscreen"
+            />
+          </div>
+        )}
 
         {/* Talent */}
         <section className="space-y-4">

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
+  Files,
   FileText,
   FolderKanban,
   LayoutDashboard,
@@ -193,6 +194,7 @@ export function WorkspaceShell({
 
   const isSubcontractor = signedIn && role === "subcontractor";
   const homeHref = isSubcontractor ? "/subcontractor" : "/";
+  const showDocs = signedIn && !isSubcontractor && canAccessProjects(perms);
 
   const sectionLinks: SectionLink[] = (() => {
     const on = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -527,6 +529,15 @@ export function WorkspaceShell({
                   label="Projects"
                   icon={FolderKanban}
                   active={isActive("/projects")}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              )}
+              {showDocs && (
+                <NavLink
+                  href="/docs"
+                  label="Documents"
+                  icon={Files}
+                  active={isActive("/docs")}
                   onNavigate={() => setMobileOpen(false)}
                 />
               )}

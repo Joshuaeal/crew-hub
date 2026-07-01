@@ -19,6 +19,10 @@ export const ALLOWED_MIME_TYPES = [
   "image/heic",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
 ];
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -58,6 +62,10 @@ async function writeAll(rows: ProjectFile[]) {
 export async function listProjectFiles(projectId: string): Promise<ProjectFile[]> {
   const all = await readAll();
   return all.filter((f) => f.projectId === projectId);
+}
+
+export async function listAllProjectFiles(): Promise<ProjectFile[]> {
+  return readAll();
 }
 
 export async function getProjectFile(fileId: string): Promise<ProjectFile | undefined> {
@@ -115,6 +123,17 @@ export async function deleteAllProjectFiles(projectId: string): Promise<void> {
     }
   }
   await writeAll(all.filter((f) => f.projectId !== projectId));
+}
+
+export async function updateProjectFileMeta(meta: ProjectFile): Promise<void> {
+  const all = await readAll();
+  const idx = all.findIndex((f) => f.id === meta.id);
+  if (idx === -1) {
+    all.push(meta);
+  } else {
+    all[idx] = meta;
+  }
+  await writeAll(all);
 }
 
 export function getProjectFileAbsPath(storedRelative: string): string {

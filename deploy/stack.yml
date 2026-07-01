@@ -24,6 +24,9 @@ services:
       # Whisper ASR (voice transcription) — points to the whisper-asr service
       WHISPER_ASR_URL: "http://whisper-asr:9000"
       NEXT_PUBLIC_CREW_PUBLIC_URL: "${NEXT_PUBLIC_CREW_PUBLIC_URL:-}"
+      # Internal URL Collabora uses to reach the WOPI host (crew-hub service).
+      # Defaults to the internal Docker service name — change only if your network differs.
+      CREW_WOPI_BASE_URL: "${CREW_WOPI_BASE_URL:-http://crew-hub:3000}"
       NEXT_PUBLIC_SERVICE_SYNAPSE_URL: "${NEXT_PUBLIC_SERVICE_SYNAPSE_URL:-}"
       NEXT_PUBLIC_MATRIX_HOMESERVER_URL: "${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-}"
       NEXT_PUBLIC_SERVICE_MATRIX_CLIENT_URL: "${NEXT_PUBLIC_SERVICE_MATRIX_CLIENT_URL:-}"
@@ -127,6 +130,49 @@ services:
       replicas: ${WHISPER_ASR_REPLICAS:-0}
       restart_policy:
         condition: on-failure
+      placement:
+        constraints:
+          - "node.hostname == avblackburn"
+
+  # ── Collabora Online (WOPI document editor) ───────────────────────────────────
+  # Collabora Online is LibreOffice in the browser. It connects to crew-hub via
+  # the WOPI protocol to open, edit, and auto-save project file attachments.
+  #
+  # To enable:
+  #   1. Remove the leading '#' from the collabora block below.
+  #   2. Deploy the stack.
+  #   3. In Admin → Instance Settings, set Collabora URL to https://collabora.yourdomain.com
+  #      (or http://your-host:9980 for HTTP-only internal access).
+  #   4. Ensure your reverse proxy passes requests to this service.
+  #      Collabora requires WebSocket support and the following headers:
+  #        X-Forwarded-For, X-Forwarded-Proto, Host
+  #
+  # Set in your .env / Swarm secrets:
+  #   COLLABORA_DOMAIN    regex of allowed WOPI hosts, e.g. crew\\.yourdomain\\.com
+  #   COLLABORA_NODE_HOSTNAME  (optional) pin to a specific node
+
+  # collabora:
+  #   image: collabora/code:latest
+  #   ports:
+  #     - target: 9980
+  #       published: ${COLLABORA_PORT:-9980}
+  #       protocol: tcp
+  #       mode: ingress
+  #   environment:
+  #     # Regex of domains allowed to use this Collabora instance as WOPI host.
+  #     domain: "${COLLABORA_DOMAIN:-crew\\.yourdomain\\.com}"
+  #     server_name: "${COLLABORA_SERVER_NAME:-collabora.yourdomain.com}"
+  #     DONT_GEN_SSL_CERT: "true"
+  #     extra_params: "--o:ssl.enable=false --o:ssl.termination=true"
+  #   networks:
+  #     - crew_net
+  #   deploy:
+  #     replicas: 1
+  #     restart_policy:
+  #       condition: on-failure
+  #     placement:
+  #       constraints:
+  #         - "node.hostname == ${COLLABORA_NODE_HOSTNAME:-}"
 
   # ── AFFiNE self-hosted workspace ──────────────────────────────────────────────
   # AFFiNE is a separate full-stack service (its own Postgres + Redis) exposed at

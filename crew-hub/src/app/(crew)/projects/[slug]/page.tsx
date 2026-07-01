@@ -62,6 +62,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         clientList={clientList}
         userList={userList}
         affineUrl={settings?.affineUrl}
+        collaboraUrl={settings?.collaboraUrl}
         currentUserId={session.userId}
       />
     </div>

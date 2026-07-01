@@ -131,6 +131,7 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
       matrixClientUrl: isHttpUrl(o.matrixClientUrl) ? (o.matrixClientUrl as string).trim() : undefined,
       synapseAdminUrl: isHttpUrl(o.synapseAdminUrl) ? (o.synapseAdminUrl as string).trim() : undefined,
       affineUrl: isHttpUrl(o.affineUrl) ? (o.affineUrl as string).trim() : undefined,
+      collaboraUrl: isHttpUrl(o.collaboraUrl) ? (o.collaboraUrl as string).trim() : undefined,
       uiCss: typeof o.uiCss === "string" && o.uiCss.trim() ? o.uiCss : undefined,
       invoiceSenderBlock:
         typeof o.invoiceSenderBlock === "string" && o.invoiceSenderBlock.trim()
@@ -158,6 +159,8 @@ export async function readInstanceSettings(): Promise<InstanceSettings> {
         return undefined;
       })(),
       omlxUrl: isHttpUrl(o.omlxUrl) ? (o.omlxUrl as string).trim() : undefined,
+      omlxApiKey: typeof o.omlxApiKey === "string" && o.omlxApiKey ? (o.omlxApiKey as string).trim() : undefined,
+      omlxModel: typeof o.omlxModel === "string" && o.omlxModel ? (o.omlxModel as string).trim() : undefined,
       radioLatchingEnabled: o.radioLatchingEnabled === true ? true : undefined,
       radioChannels: (() => {
         if (!Array.isArray(o.radioChannels)) return undefined;

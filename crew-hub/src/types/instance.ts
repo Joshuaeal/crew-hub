@@ -88,6 +88,11 @@ export type InstanceSettings = {
    */
   enabledModules?: ModuleId[];
   /**
+   * Public URL of the self-hosted Collabora Online instance (e.g. https://collabora.yourdomain.com).
+   * Used as the WOPI client editor for project file attachments.
+   */
+  collaboraUrl?: string;
+  /**
    * Public URL of the self-hosted AFFiNE workspace (e.g. https://affine.yourdomain.com).
    * Used for both the /workspace embed and inline project board links.
    * Must be set before AFFiNE auth bridging will work.
@@ -103,11 +108,12 @@ export type InstanceSettings = {
    * Example: ws://localhost:7880 or wss://livekit.yourdomain.com
    */
   livekitUrl?: string;
-  /**
-   * Base URL of the omlx machine's LLM API (e.g. http://100.x.x.x:11434) used to generate
-   * structured meeting note summaries from raw transcripts.
-   */
+  /** Base URL of the omlx machine's LLM API used to generate structured meeting note summaries. */
   omlxUrl?: string;
+  /** Optional API key sent as Authorization: Bearer for the omlx endpoint. */
+  omlxApiKey?: string;
+  /** Model name to use for summarisation (defaults to Qwen2.5-7B-Instruct-4bit). */
+  omlxModel?: string;
   /** Radio channel names shown in the comms radio page (comma-separated label:roomName pairs or just labels). */
   radioChannels?: string[];
   /**
