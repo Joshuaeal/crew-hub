@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import { getProjectFile, getProjectFileAbsPath, updateProjectFileMeta } from "@/lib/project-files-store";
-import { verifyWopiToken } from "../route";
+import { verifyWopiToken } from "@/lib/wopi-token";
 
 export const dynamic = "force-dynamic";
 

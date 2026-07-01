@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAnyPermission } from "@/lib/api-auth";
 import { getProjectBySlug } from "@/lib/projects-store";
 import { getProjectFile } from "@/lib/project-files-store";
-import { createWopiToken } from "@/app/api/wopi/files/[fileId]/route";
+import { createWopiToken } from "@/lib/wopi-token";
 import { readInstanceSettings } from "@/lib/instance-settings-store";
 
 export const dynamic = "force-dynamic";
