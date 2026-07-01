@@ -39,9 +39,12 @@ type InstanceSettings = {
   setupComplete?: boolean;
   livekitUrl?: string;
   omlxUrl?: string;
+  omlxApiKey?: string;
+  omlxModel?: string;
   radioChannels?: string[];
   radioLatchingEnabled?: boolean;
   affineUrl?: string;
+  collaboraUrl?: string;
   updatedAt: string;
 };
 
@@ -96,7 +99,10 @@ export function SetupWizardClient() {
   const [vdoRoomPrefix, setVdoRoomPrefix] = useState("");
   const [livekitUrl, setLivekitUrl] = useState("");
   const [omlxUrl, setOmlxUrl] = useState("");
+  const [omlxApiKey, setOmlxApiKey] = useState("");
+  const [omlxModel, setOmlxModel] = useState("");
   const [affineUrl, setAffineUrl] = useState("");
+  const [collaboraUrl, setCollaboraUrl] = useState("");
   const [radioChannels, setRadioChannels] = useState("");
   const [radioLatchingEnabled, setRadioLatchingEnabled] = useState(false);
   const [invoiceNumberFormat, setInvoiceNumberFormat] = useState("");
@@ -141,7 +147,10 @@ export function SetupWizardClient() {
           setVdoRoomPrefix(inst.vdoRoomPrefix || "");
           setLivekitUrl(inst.livekitUrl || "");
           setOmlxUrl(inst.omlxUrl || "");
+          setOmlxApiKey(inst.omlxApiKey || "");
+          setOmlxModel(inst.omlxModel || "");
           setAffineUrl(inst.affineUrl || "");
+          setCollaboraUrl(inst.collaboraUrl || "");
           setRadioChannels((inst.radioChannels || []).join(", "));
           setRadioLatchingEnabled(inst.radioLatchingEnabled ?? false);
           setInvoiceNumberFormat(inst.invoiceNumberFormat || "");
@@ -211,7 +220,10 @@ export function SetupWizardClient() {
             vdoRoomPrefix,
             livekitUrl,
             omlxUrl,
+            omlxApiKey,
+            omlxModel,
             affineUrl,
+            collaboraUrl,
             radioChannels: radioChannels.trim()
               ? radioChannels.split(",").map((s) => s.trim()).filter(Boolean)
               : undefined,
@@ -670,6 +682,22 @@ export function SetupWizardClient() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-300">
+                    Collabora Online URL (document editor)
+                  </label>
+                  <input
+                    type="url"
+                    value={collaboraUrl}
+                    onChange={(e) => setCollaboraUrl(e.target.value)}
+                    placeholder="http://192.168.4.184:9980"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-xs text-slate-600">
+                    URL of your self-hosted Collabora Online instance. Enables inline editing of DOCX, XLSX, ODF, and PDF files attached to projects.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
                     LiveKit URL (radio comms)
                   </label>
                   <input
@@ -688,14 +716,43 @@ export function SetupWizardClient() {
                     omlx LLM URL (meeting note summaries)
                   </label>
                   <input
-                    type="url"
+                    type="text"
                     value={omlxUrl}
                     onChange={(e) => setOmlxUrl(e.target.value)}
                     placeholder="http://100.x.x.x:11434"
                     className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
                   />
                   <p className="mt-1 text-xs text-slate-600">
-                    Base URL of the omlx machine&apos;s LLM API (Ollama or compatible). Used to generate structured summaries from meeting transcripts in the Notetaker. Use the Tailscale IP if accessing remotely.
+                    Base URL of the omlx machine&apos;s LLM API. Use the Tailscale IP if accessing remotely. For Open WebUI, use <code className="rounded bg-black/30 px-1">http://100.x.x.x:8000</code>.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    omlx API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={omlxApiKey}
+                    onChange={(e) => setOmlxApiKey(e.target.value)}
+                    placeholder="sk-… or leave blank if no auth required"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    omlx Model
+                  </label>
+                  <input
+                    type="text"
+                    value={omlxModel}
+                    onChange={(e) => setOmlxModel(e.target.value)}
+                    placeholder="Qwen2.5-7B-Instruct-4bit"
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-xs text-slate-600">
+                    Model name as shown in your LLM server. Leave blank to use the default.
                   </p>
                 </div>
 
