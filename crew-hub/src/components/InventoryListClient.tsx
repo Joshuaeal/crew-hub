@@ -186,7 +186,6 @@ export function InventoryListClient({ items, canEdit, projects = [], catalogItem
             Number.isFinite(it.minQuantity) &&
             it.quantity <= it.minQuantity;
           const priceStr = pricingLine(it);
-          const catalog = catalogByInventoryId.get(it.id) ?? null;
           const canQuote = projects.length > 0;
 
           const inner = (
