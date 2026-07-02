@@ -107,9 +107,9 @@ function ProjectPicker({
 
       // Open the most recent file in Perastage, or restart fresh for new projects
       try {
-        const r = await fetch(`/api/lighting-plots/projects/${project.id}/files`);
+        const r = await fetch(`/api/lighting-plots/projects/${project.id}/files`, { credentials: "same-origin" });
         const data = await r.json() as { files?: { name: string; modifiedAt: string }[] };
-        const files = data.files ?? [];
+        const files = r.ok ? (data.files ?? []) : [];
         await fetch("/api/lighting-plots/open", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
