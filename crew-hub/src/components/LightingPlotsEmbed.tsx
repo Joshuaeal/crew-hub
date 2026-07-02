@@ -97,18 +97,38 @@ function ProjectPicker({
     async (project: ProjectLite) => {
       setCreating(project.id);
       try {
+        // Ensure the project folder exists
         await fetch("/api/lighting-plots/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId: project.id, projectName: project.name }),
         });
-      } catch {
-        // folder creation is best-effort; still open Perastage
+      } catch { /* best-effort */ }
+
+      // If the project already has files, open the most recent one in Perastage
+      const projectPlot = plots?.[project.id];
+      if (projectPlot) {
+        try {
+          const r = await fetch(`/api/lighting-plots/projects/${project.id}/files`);
+          const data = await r.json() as { files?: { name: string; modifiedAt: string }[] };
+          const files = data.files ?? [];
+          if (files.length > 0) {
+            // Most recent first (already sorted by API)
+            await fetch("/api/lighting-plots/open", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ projectId: project.id, filename: files[0].name }),
+            });
+            // Wait for Perastage to relaunch before showing VNC
+            await new Promise((res) => setTimeout(res, 3500));
+          }
+        } catch { /* best-effort */ }
       }
+
       setCreating(null);
       onSelect(project);
     },
-    [onSelect]
+    [onSelect, plots]
   );
 
   const active = projects.filter((p) => p.status === "active");
@@ -259,7 +279,7 @@ function ProjectCard({
       {creating && (
         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
           <span className="h-3 w-3 animate-spin rounded-full border border-brand/40 border-t-brand" />
-          Opening…
+          {plot && plot.mvrCount > 0 ? "Loading plot…" : "Opening…"}
         </div>
       )}
     </button>
