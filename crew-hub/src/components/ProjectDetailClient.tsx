@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   Check,
@@ -119,7 +120,9 @@ export function ProjectDetailClient({
   catalogItems = [],
   currentUserId,
 }: Props) {
+  const router = useRouter();
   const [project, setProject] = useState<Project>(initialProject);
+  const [openingInPerastage, setOpeningInPerastage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -1011,18 +1014,26 @@ export function ProjectDetailClient({
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
+                      disabled={openingInPerastage === f.name}
                       onClick={() => {
+                        setOpeningInPerastage(f.name);
                         void fetch("/api/lighting-plots/open", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ projectId: project.id, filename: f.name }),
+                        }).finally(() => {
+                          setTimeout(() => {
+                            router.push("/lighting-plots");
+                          }, 3500);
                         });
                       }}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-brand/80 disabled:cursor-wait disabled:opacity-60"
                       aria-label="Open in Perastage"
                       title="Open in Perastage"
                     >
-                      <Lightbulb className="h-4 w-4" aria-hidden />
+                      {openingInPerastage === f.name
+                        ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        : <Lightbulb className="h-4 w-4" aria-hidden />}
                     </button>
                     <a
                       href={`/api/lighting-plots/projects/${project.id}/files/${encodeURIComponent(f.name)}`}
