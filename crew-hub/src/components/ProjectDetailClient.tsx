@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   Circle,
+  Copy,
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  Lightbulb,
   Link2,
   Link2Off,
   Loader2,
@@ -24,6 +27,7 @@ import {
 import { AffineEmbed } from "@/components/AffineEmbed";
 import type { Project, ProjectFile } from "@/types/projects";
 import type { BillingCatalogItem } from "@/types/billing";
+import type { InventoryItem } from "@/types/inventory";
 import { catalogUnitPriceForTier } from "@/types/billing";
 import { SpreadsheetImporter } from "@/components/SpreadsheetImporter";
 import {
@@ -120,6 +124,8 @@ export function ProjectDetailClient({
   const [ok, setOk] = useState<string | null>(null);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [plotFiles, setPlotFiles] = useState<{ name: string; sizeBytes: number; modifiedAt: string }[]>([]);
+  const [copiedFileId, setCopiedFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editorModal, setEditorModal] = useState<{ url: string; filename: string } | null>(null);
 
@@ -156,8 +162,23 @@ export function ProjectDetailClient({
   const [pickerTiers, setPickerTiers] = useState<Record<string, "low" | "mid" | "high">>({});
   const [pickerQtys, setPickerQtys] = useState<Record<string, string>>({});
 
+  // Catalog items — seeded from SSR prop, refreshed on mount so newly-added items appear
+  const [liveCatalogItems, setLiveCatalogItems] = useState<BillingCatalogItem[]>(catalogItems);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  useEffect(() => {
+    fetch("/api/billing/catalog", { credentials: "same-origin" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.items) setLiveCatalogItems(d.items); })
+      .catch(() => {});
+    fetch("/api/inventory/items", { credentials: "same-origin" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.items) setInventoryItems(d.items); })
+      .catch(() => {});
+  }, []);
+
   // Line item description autocomplete
-  const [liSuggestions, setLiSuggestions] = useState<BillingCatalogItem[]>([]);
+  type LiSuggestion = { id: string; name: string; sku?: string; price: string };
+  const [liSuggestions, setLiSuggestions] = useState<LiSuggestion[]>([]);
   const [liSuggestOpen, setLiSuggestOpen] = useState(false);
 
   // Milestone form
@@ -224,7 +245,18 @@ export function ProjectDetailClient({
     }
   }, [slug]);
 
+  const fetchPlotFiles = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/lighting-plots/projects/${project.id}/files`, { credentials: "same-origin" });
+      if (r.ok) {
+        const d = await r.json() as { files?: { name: string; sizeBytes: number; modifiedAt: string }[] };
+        setPlotFiles(d.files ?? []);
+      }
+    } catch { /* ignore */ }
+  }, [project.id]);
+
   useEffect(() => { void fetchFiles(); }, [fetchFiles]);
+  useEffect(() => { void fetchPlotFiles(); }, [fetchPlotFiles]);
 
   function flash(msg: string, isErr = false) {
     if (isErr) { setErr(msg); setOk(null); }
@@ -900,6 +932,32 @@ export function ProjectDetailClient({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const copyUrl = async () => {
+                            let url: string;
+                            if (collaboraUrl && isEditable(f.mimeType)) {
+                              const r = await fetch(`/api/projects/${slug}/files/${f.id}/wopi-token`, { method: "POST", credentials: "same-origin" });
+                              const d = await r.json() as { editorUrl?: string };
+                              url = d.editorUrl ?? `${window.location.origin}/api/projects/${slug}/files/${f.id}`;
+                            } else {
+                              url = `${window.location.origin}/api/projects/${slug}/files/${f.id}`;
+                            }
+                            await navigator.clipboard.writeText(url);
+                            setCopiedFileId(f.id);
+                            setTimeout(() => setCopiedFileId(null), 2000);
+                          };
+                          void copyUrl();
+                        }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+                        aria-label="Copy link"
+                        title="Copy Collabora link"
+                      >
+                        {copiedFileId === f.id
+                          ? <Check className="h-4 w-4 text-green-400" aria-hidden />
+                          : <Copy className="h-4 w-4" aria-hidden />}
+                      </button>
                       {collaboraUrl && isEditable(f.mimeType) && (
                         <button
                           type="button"
@@ -930,6 +988,37 @@ export function ProjectDetailClient({
           </div>
         </section>
 
+        {/* Lighting plot files from NFS share */}
+        {plotFiles.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <Lightbulb className="h-3.5 w-3.5" aria-hidden />
+              Lighting Plots
+            </h2>
+            <ul className="space-y-2">
+              {plotFiles.map((f) => (
+                <li
+                  key={f.name}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={`/api/lighting-plots/projects/${project.id}/files/${encodeURIComponent(f.name)}`}
+                      download={f.name}
+                      className="text-sm font-medium text-brand/90 hover:underline"
+                    >
+                      {f.name} ↓
+                    </a>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {fmtSize(f.sizeBytes)} · {new Date(f.modifiedAt).toLocaleDateString("en-AU")}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Catalog picker modal */}
         {showCatalogPicker && (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm pt-16 px-4">
@@ -953,7 +1042,7 @@ export function ProjectDetailClient({
                 </div>
               </div>
               <ul className="min-h-0 flex-1 overflow-y-auto divide-y divide-white/[0.06] px-5">
-                {catalogItems
+                {liveCatalogItems
                   .filter((c) => {
                     const q = catalogSearch.toLowerCase();
                     return !q || c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q);
@@ -1009,6 +1098,70 @@ export function ProjectDetailClient({
                       </li>
                     );
                   })}
+                {(() => {
+                  const cataloggedIds = new Set(liveCatalogItems.map((c) => c.inventoryItemId).filter(Boolean));
+                  const q = catalogSearch.toLowerCase();
+                  const uncatalogued = inventoryItems.filter(
+                    (inv) =>
+                      !cataloggedIds.has(inv.id) &&
+                      (!q || inv.name.toLowerCase().includes(q) || (inv.sku ?? "").toLowerCase().includes(q))
+                  );
+                  if (uncatalogued.length === 0) return null;
+                  return uncatalogued.map((inv) => {
+                    const price = inv.hireMidAud ?? 0;
+                    const qty = pickerQtys[inv.id] ?? "1";
+                    return (
+                      <li key={inv.id} className="flex items-center gap-3 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-white truncate">{inv.name}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {inv.sku && <span className="mr-2">{inv.sku}</span>}
+                            {price ? `$${price}` : "No rate set"}
+                            <span className="ml-2 rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] text-violet-300">inventory</span>
+                          </p>
+                        </div>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={qty}
+                          onChange={(e) => setPickerQtys((p) => ({ ...p, [inv.id]: e.target.value }))}
+                          className="w-16 shrink-0 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-center text-sm text-white outline-none focus:ring-1 focus:ring-brand/40"
+                          aria-label="Quantity"
+                        />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            void (async () => {
+                              setBusy(true);
+                              try {
+                                const r = await fetch(`/api/projects/${slug}/import-line-items`, {
+                                  method: "POST",
+                                  credentials: "same-origin",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ rows: [{ description: inv.name, quantity: parseFloat(qty) || 1, unitPrice: price }] }),
+                                });
+                                const d = await r.json();
+                                if (!r.ok) throw new Error(d.error ?? "Failed");
+                                const pr = await fetch(`/api/projects/${slug}`, { credentials: "same-origin" });
+                                if (pr.ok) { const pd = await pr.json(); setProject(pd.project as Project); }
+                                flash(`Added ${inv.name}.`);
+                              } catch (e) {
+                                flash(e instanceof Error ? e.message : "Failed", true);
+                              } finally {
+                                setBusy(false);
+                              }
+                            })();
+                          }}
+                          className="shrink-0 rounded-lg bg-brand/15 px-3 py-1.5 text-xs font-medium text-brand/90 ring-1 ring-brand/25 hover:bg-brand/25 disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                      </li>
+                    );
+                  });
+                })()}
               </ul>
               <div className="shrink-0 border-t border-white/10 px-5 py-3">
                 <button type="button" onClick={() => setShowCatalogPicker(false)} className="text-xs text-slate-500 hover:text-slate-300">
@@ -1336,7 +1489,7 @@ export function ProjectDetailClient({
                       <Plus className="h-4 w-4" aria-hidden />
                       {showLineForm ? "Cancel" : "Add line item"}
                     </button>
-                    {catalogItems.length > 0 && (
+                    {liveCatalogItems.length > 0 && (
                       <button
                         type="button"
                         onClick={() => { setShowCatalogPicker(true); setCatalogSearch(""); }}
@@ -1382,11 +1535,14 @@ export function ProjectDetailClient({
                         setLiDesc(q);
                         if (q.trim().length >= 1) {
                           const ql = q.toLowerCase();
-                          const matches = catalogItems.filter(
-                            (c) =>
-                              c.name.toLowerCase().includes(ql) ||
-                              (c.sku ?? "").toLowerCase().includes(ql)
-                          ).slice(0, 8);
+                          const cataloggedIds = new Set(liveCatalogItems.map((c) => c.inventoryItemId).filter(Boolean));
+                          const catalogMatches: LiSuggestion[] = liveCatalogItems
+                            .filter((c) => c.name.toLowerCase().includes(ql) || (c.sku ?? "").toLowerCase().includes(ql))
+                            .map((c) => ({ id: c.id, name: c.name, sku: c.sku, price: c.unitPriceMid ?? c.unitPrice ?? "0" }));
+                          const invMatches: LiSuggestion[] = inventoryItems
+                            .filter((inv) => !cataloggedIds.has(inv.id) && (inv.name.toLowerCase().includes(ql) || (inv.sku ?? "").toLowerCase().includes(ql)))
+                            .map((inv) => ({ id: inv.id, name: inv.name, sku: inv.sku, price: String(inv.hireMidAud ?? 0) }));
+                          const matches = [...catalogMatches, ...invMatches].slice(0, 8);
                           setLiSuggestions(matches);
                           setLiSuggestOpen(matches.length > 0);
                         } else {
@@ -1409,7 +1565,7 @@ export function ProjectDetailClient({
                               type="button"
                               onMouseDown={() => {
                                 setLiDesc(c.name);
-                                setLiPrice(c.unitPriceMid ?? c.unitPrice ?? "0");
+                                setLiPrice(c.price);
                                 setLiSuggestOpen(false);
                               }}
                               className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-white/10"
@@ -1419,7 +1575,7 @@ export function ProjectDetailClient({
                                 {c.sku && <span className="text-[11px] text-slate-500">{c.sku}</span>}
                               </span>
                               <span className="shrink-0 text-xs text-emerald-400">
-                                ${c.unitPriceMid ?? c.unitPrice}
+                                ${c.price}
                               </span>
                             </button>
                           </li>
