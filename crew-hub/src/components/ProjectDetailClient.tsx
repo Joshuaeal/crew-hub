@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Circle,
   Copy,
+  Download,
   ExternalLink,
   FileSpreadsheet,
   FileText,
@@ -1002,16 +1003,36 @@ export function ProjectDetailClient({
                   className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
                 >
                   <div className="min-w-0 flex-1">
-                    <a
-                      href={`/api/lighting-plots/projects/${project.id}/files/${encodeURIComponent(f.name)}`}
-                      download={f.name}
-                      className="text-sm font-medium text-brand/90 hover:underline"
-                    >
-                      {f.name} ↓
-                    </a>
+                    <p className="text-sm font-medium text-white">{f.name}</p>
                     <p className="mt-0.5 text-xs text-slate-500">
                       {fmtSize(f.sizeBytes)} · {new Date(f.modifiedAt).toLocaleDateString("en-AU")}
                     </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void fetch("/api/lighting-plots/open", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ projectId: project.id, filename: f.name }),
+                        });
+                      }}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      aria-label="Open in Perastage"
+                      title="Open in Perastage"
+                    >
+                      <Lightbulb className="h-4 w-4" aria-hidden />
+                    </button>
+                    <a
+                      href={`/api/lighting-plots/projects/${project.id}/files/${encodeURIComponent(f.name)}`}
+                      download={f.name}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      aria-label="Download"
+                      title="Download"
+                    >
+                      <Download className="h-4 w-4" aria-hidden />
+                    </a>
                   </div>
                 </li>
               ))}

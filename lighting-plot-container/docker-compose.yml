@@ -1,0 +1,26 @@
+services:
+  perastage:
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+    image: perastage-novnc:latest
+    platform: linux/amd64
+    container_name: perastage
+    restart: unless-stopped
+
+    ports:
+      - "6080:6080"
+
+    environment:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      # NFS mount — container mounts this internally at startup.
+      # Avoids Mac/OrbStack NFS stack limitations entirely.
+      PERASTAGE_NFS_ADDR: "192.168.4.202"
+      PERASTAGE_NFS_PATH: "/export/srv/crew/raconteur/plots"
+
+    # SYS_ADMIN capability required for the container to mount NFS itself
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
