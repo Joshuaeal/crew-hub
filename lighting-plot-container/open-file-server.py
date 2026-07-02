@@ -39,17 +39,24 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         file_path = data.get("path", "").strip()
-        if not file_path or ".." in file_path:
+        if file_path and ".." in file_path:
             self._respond(400, {"error": "invalid path"})
             return
 
-        if not os.path.exists(file_path):
+        if file_path and not os.path.exists(file_path):
             self._respond(404, {"error": "file not found"})
             return
 
-        # Write path for the wrapper script, then restart Perastage via supervisorctl
-        with open(OPEN_FILE_PATH, "w") as f:
-            f.write(file_path)
+        # Write path for the wrapper script (omit to start fresh with no file)
+        if file_path:
+            with open(OPEN_FILE_PATH, "w") as f:
+                f.write(file_path)
+        else:
+            # Ensure no stale open-file marker so Perastage starts fresh
+            try:
+                os.remove(OPEN_FILE_PATH)
+            except FileNotFoundError:
+                pass
 
         try:
             subprocess.run(["supervisorctl", "restart", "perastage"], check=True)

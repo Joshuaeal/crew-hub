@@ -105,25 +105,22 @@ function ProjectPicker({
         });
       } catch { /* best-effort */ }
 
-      // If the project already has files, open the most recent one in Perastage
-      const projectPlot = plots?.[project.id];
-      if (projectPlot) {
-        try {
-          const r = await fetch(`/api/lighting-plots/projects/${project.id}/files`);
-          const data = await r.json() as { files?: { name: string; modifiedAt: string }[] };
-          const files = data.files ?? [];
-          if (files.length > 0) {
-            // Most recent first (already sorted by API)
-            await fetch("/api/lighting-plots/open", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId: project.id, filename: files[0].name }),
-            });
-            // Wait for Perastage to relaunch before showing VNC
-            await new Promise((res) => setTimeout(res, 3500));
-          }
-        } catch { /* best-effort */ }
-      }
+      // Open the most recent file in Perastage, or restart fresh for new projects
+      try {
+        const r = await fetch(`/api/lighting-plots/projects/${project.id}/files`);
+        const data = await r.json() as { files?: { name: string; modifiedAt: string }[] };
+        const files = data.files ?? [];
+        await fetch("/api/lighting-plots/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: project.id,
+            filename: files.length > 0 ? files[0].name : "",
+          }),
+        });
+        // Wait for Perastage to relaunch before showing VNC
+        await new Promise((res) => setTimeout(res, 3500));
+      } catch { /* best-effort */ }
 
       setCreating(null);
       onSelect(project);

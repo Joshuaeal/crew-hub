@@ -22,11 +22,12 @@ export async function POST(req: NextRequest) {
   const filename = typeof body.filename === "string" ? body.filename.trim() : "";
 
   if (!projectId || projectId.includes("/") || projectId.includes("..") ||
-      !filename || filename.includes("/") || filename.includes("..")) {
+      filename.includes("/") || filename.includes("..")) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
   }
 
-  const filePath = join(PLOTS_DIR, "projects", projectId, filename);
+  // Empty filename = restart Perastage fresh (no file to open)
+  const filePath = filename ? join(PLOTS_DIR, "projects", projectId, filename) : "";
 
   try {
     const r = await fetch(PERASTAGE_OPEN_URL, {
