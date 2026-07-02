@@ -9,14 +9,17 @@ services:
       - target: 3000
         published: ${CREW_HUB_PORT:-38471}
         protocol: tcp
-        mode: ingress
+        mode: host
     environment:
+      # NFS-backed data directory — set CREW_DATA_DIR to override the default .data path.
+      # On NFS deployments this should match the container mount point below.
+      CREW_DATA_DIR: "${CREW_DATA_DIR:-}"
       MATRIX_UPSTREAM_URL: "http://synapse:8008"
       SYNAPSE_SERVER_NAME: "${SYNAPSE_SERVER_NAME:-localhost}"
       CREW_SYNAPSE_SERVER_NAME: "${CREW_SYNAPSE_SERVER_NAME:-localhost}"
       CREW_MATRIX_DEFAULT_ROOM_ID: "${CREW_MATRIX_DEFAULT_ROOM_ID:-}"
       SYNAPSE_ADMIN_PORT: "${SYNAPSE_ADMIN_PORT:-18088}"
-      CREW_SESSION_SECRET: "${CREW_SESSION_SECRET:-}"
+      CREW_SESSION_SECRET: "${CREW_SESSION_SECRET:-aW3BAw9VPuyapU8s7twc66qkAHOfm52B}"
       CREW_MATRIX_SEED_USER: "${CREW_MATRIX_SEED_USER:-}"
       CREW_MATRIX_SEED_PASSWORD: "${CREW_MATRIX_SEED_PASSWORD:-}"
       CREW_SYNAPSE_ADMIN_ACCESS_TOKEN: "${CREW_SYNAPSE_ADMIN_ACCESS_TOKEN:-}"
@@ -27,6 +30,8 @@ services:
       # Internal URL Collabora uses to reach the WOPI host (crew-hub service).
       # Defaults to the internal Docker service name — change only if your network differs.
       CREW_WOPI_BASE_URL: "${CREW_WOPI_BASE_URL:-http://crew-hub:3000}"
+      # Path to the plots NFS share inside the container — shared with the perastage service.
+      LIGHTING_PLOTS_DATA_DIR: "${LIGHTING_PLOTS_DATA_DIR:-/app/.plots}"
       NEXT_PUBLIC_SERVICE_SYNAPSE_URL: "${NEXT_PUBLIC_SERVICE_SYNAPSE_URL:-}"
       NEXT_PUBLIC_MATRIX_HOMESERVER_URL: "${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-}"
       NEXT_PUBLIC_SERVICE_MATRIX_CLIENT_URL: "${NEXT_PUBLIC_SERVICE_MATRIX_CLIENT_URL:-}"
@@ -38,7 +43,8 @@ services:
       SMTP_FROM: "${SMTP_FROM:-}"
       SMTP_SECURE: "${SMTP_SECURE:-}"
     volumes:
-      - crew_hub_data:/app/.data
+      - crew_hub_nfs:/app/.data
+      - plots_data:/app/.plots
     networks:
       - crew_net
     deploy:
@@ -46,7 +52,44 @@ services:
       restart_policy:
         condition: on-failure
       update_config:
-        order: start-first
+        order: stop-first
+      placement:
+        constraints:
+          # Pin to the node running cloudflared — host-mode port must be co-located with the tunnel.
+          # Change CREW_HUB_NODE if you move the tunnel to a different node.
+          - "node.hostname == ${CREW_HUB_NODE:-avcollingwood}"
+
+  # ── Perastage lighting plot editor ───────────────────────────────────────────
+  # Headless Perastage (wxWidgets/OpenGL) exposed via noVNC on port 6080.
+  # Pinned to avblackburn (Mac) — the x86_64 AppImage runs under Rosetta there.
+  # Access via LIGHTING_PLOTS_URL (e.g. https://plots.raconteur.melbourne).
+  #
+  # To enable: push the perastage-novnc image to the registry then uncomment.
+  #   cd lighting-plot-container && docker build --platform linux/amd64 -t 192.168.4.184:5001/perastage-novnc:latest .
+  #   docker push 192.168.4.184:5001/perastage-novnc:latest
+  perastage:
+    image: "${PERASTAGE_IMAGE:-192.168.4.184:5001/perastage-novnc}:${PERASTAGE_TAG:-latest}"
+    ports:
+      - target: 6080
+        published: ${PERASTAGE_PORT:-6080}
+        protocol: tcp
+        mode: ingress
+    environment:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      PERASTAGE_NFS_ADDR: "${CREW_NFS_ADDR:-192.168.4.202}"
+      PERASTAGE_NFS_PATH: "${CREW_NFS_EXPORT_ROOT:-/export/srv/crew}/${CREW_INSTANCE_ID:-raconteur}/plots"
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - crew_net
+    deploy:
+      replicas: ${PERASTAGE_REPLICAS:-1}
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          # Pin to avblackburn — Rosetta x86_64 emulation, no GPU needed (Mesa llvmpipe)
+          - "node.hostname == avblackburn"
 
   synapse:
     image: matrixdotorg/synapse:latest
@@ -71,13 +114,13 @@ services:
       # constraint if you are using a single-node swarm.
       placement:
         constraints:
-          - "node.hostname == ${SYNAPSE_NODE_HOSTNAME:-}"
+          - "node.hostname == ${SYNAPSE_NODE_HOSTNAME:-avarapiles}"
 
   synapse-admin:
     image: awesometechnologies/synapse-admin:latest
     ports:
       - target: 80
-        published: ${SYNAPSE_ADMIN_PORT:-18088}
+        published: ${SYNAPSE_ADMIN_PORT:-18089}
         protocol: tcp
         mode: ingress
     networks:
@@ -89,22 +132,20 @@ services:
 
   livekit:
     image: livekit/livekit-server:latest
-    command: --config /livekit.yaml
+    command: --dev --bind 0.0.0.0
     ports:
       - target: 7880
-        published: ${LIVEKIT_PORT:-7880}
+        published: ${LIVEKIT_PORT:-7882}
         protocol: tcp
         mode: ingress
       - target: 7881
-        published: 7881
+        published: ${LIVEKIT_PORT_RTC:-7883}
         protocol: tcp
         mode: ingress
       - target: 50100
         published: 50100
         protocol: udp
         mode: ingress
-    volumes:
-      - livekit_config:/livekit.yaml
     networks:
       - crew_net
     deploy:
@@ -267,12 +308,18 @@ networks:
     driver: overlay
 
 volumes:
-  crew_hub_data:
+  crew_hub_nfs:
     driver: local
     driver_opts:
       type: "nfs"
-      o: "addr=${CREW_NFS_ADDR:-},rw,nfsvers=3,proto=tcp"
-      device: ":${CREW_NFS_EXPORT_ROOT:-/export/data}/crew/${CREW_INSTANCE_ID:-crew}/crew-hub-data"
+      o: "addr=${CREW_NFS_ADDR:-192.168.4.202},rw,nfsvers=4,soft,timeo=30"
+      device: ":${CREW_NFS_EXPORT_ROOT:-/srv/crew}/${CREW_INSTANCE_ID:-raconteur}/crew-hub-data"
+  plots_data:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=${CREW_NFS_ADDR:-192.168.4.202},rw,nfsvers=4,soft,timeo=30"
+      device: ":${CREW_NFS_EXPORT_ROOT:-/srv/crew}/${CREW_INSTANCE_ID:-raconteur}/plots"
   synapse_data:
     driver: local
     driver_opts:
