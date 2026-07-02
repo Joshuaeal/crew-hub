@@ -52,9 +52,18 @@ class Handler(BaseHTTPRequestHandler):
             with open(OPEN_FILE_PATH, "w") as f:
                 f.write(file_path)
         else:
-            # Ensure no stale open-file marker so Perastage starts fresh
+            # Ensure no stale open-file marker and clear Perastage's last-project
+            # memory so it starts with a blank project rather than reopening the last file.
             try:
                 os.remove(OPEN_FILE_PATH)
+            except FileNotFoundError:
+                pass
+            last_project = os.path.join(
+                os.environ.get("HOME", "/data/perastage/home"),
+                ".Perastage", "last_project.txt"
+            )
+            try:
+                os.remove(last_project)
             except FileNotFoundError:
                 pass
 
